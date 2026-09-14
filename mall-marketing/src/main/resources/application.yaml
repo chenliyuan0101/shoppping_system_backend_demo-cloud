@@ -1,0 +1,124 @@
+# =====================================================================
+# mall-marketing 公共配置（与环境无关的放这里；环境相关/涉密放 application-{dev,prod}.yaml）
+# 抽服务模板：端口/注册名/数据源/监控端点 五项，与 user-center、content、review 同一套
+# =====================================================================
+server:
+  port: 8106              # 方案 §2.2 的服务端口规划（8101~8108）
+
+spring:
+  application:
+    name: mall-marketing   # 应用名 = 注册名（批次 2 起网关按 lb://mall-marketing 路由）
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    # 业务时区口径：券的"是否过期"是 now 与 expire_time 比出来的，
+    # 而 expire_time 是 MySQL datetime（无时区）。这里与 support/MallTime.ZONE
+    # 以及 JDBC 的 serverTimezone 三处必须一致，否则跨时区机器上券会提前/延后过期。
+    time-zone: GMT+8
+  cloud:
+    nacos:
+      discovery:
+        service: mall-marketing
+        register-enabled: true
+  # P5 步骤 E：RabbitMQ 监听口径 = **手动 ack**（成功 ack / 失败重投或进死信）。
+  # 这是消费者代码的契约、不是环境差异，所以放公共段（与 review/user-center 同一处放法）；
+  # 连接信息（host/port/账号）在 application-dev.yaml。
+  # ⚠️ 它与 mall.mq.enabled 是两件事：开关为 false 时拓扑与消费者都不装配、根本不建连，
+  #    因此这条配置不会让"没有 broker 的机器"跑不了测试。
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        concurrency: 1
+        max-concurrency: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# =====================================================================
+# 业务参数
+# =====================================================================
+mall:
+  # 缓存/计数总开关：false = 完全不使用 Redis（纯 DB 逻辑 + 限流放行）
+  cache:
+    enabled: true
+  # =====================================================================
+  # P5 步骤 C：出站调 user-center（后台"领取记录"取会员用户名/昵称）
+  #   · 只用于 records：POST /internal/v1/user/member/batch
+  #   · 超时按 P2 的实测口径（连接 300ms / 读 2500ms）：下游冷启动首调约 1.98s，
+  #     照抄"目标值 300ms"会把正常请求判成故障。
+  #   · 刻意**不**做本地兜底：取不到会员信息就整体失败（与改造前同进程契约抛异常一致），
+  #     静默空用户名会让"谁领了券"变成不可信数据。
+  # =====================================================================
+  user-center:
+    base-url: ${MALL_USER_CENTER_BASE_URL:lb://mall-user-center}
+    connect-timeout-ms: 300
+    read-timeout-ms: 2500
+  # =====================================================================
+  # P5 批次 2：限流（领券端点 @RateLimit(scope="coupon_receive", limit=10, windowSeconds=60, by=USER)）
+  #
+  # ⚠️ 这里**只写说明、不写值**：三个开关的默认值都在
+  #    com.mall.marketing.config.RateLimitAspect 的 @Value 上（与单体/user-center 同一套）：
+  #      mall.rate-limit.enabled              默认 true （测试/排障可整体关掉）
+  #      mall.rate-limit.limit-override       默认 -1   （>0 时忽略注解上的 limit，压测用）
+  #      mall.rate-limit.trust-forwarded-for  默认 false（**只信连接层 IP**：
+  #         X-Forwarded-For 可伪造，采信它等于把限流开关交给攻击者）
+  #    把它们复制一份到这里的风险是"两处值不一致时以谁为准"（文件的会赢，而看代码的人不知道）；
+  #    要临时改，用命令行参数/环境变量覆盖即可：
+  #      MALL_RATE_LIMIT_LIMIT_OVERRIDE=5  （或 --mall.rate-limit.limit-override=5）
+  #
+  # 计数键：mall:rl:coupon_receive:{identity}——**与单体 CacheKeys.rateLimit 逐字相同**，
+  # 切路由前后是同一个计数桶（见 support/CacheKeys 的类注释）。
+  # =====================================================================
+  # ⚠️ 券的业务参数（可领天数/每人限领之类）仍然**不在这里**：单体把它们写在代码常量与列
+  #    （per_member_limit）里，搬过来时必须先读出**真实值**再决定放哪——凭印象填一个数字，
+  #    等于造一个"看起来像契约、其实没人读过"的配置项（P4 在 mall-review 里踩过同一个坑）。
+  # =====================================================================
+  # P5 步骤 E：券锁定对账（task.CouponLockReconcileTask）
+  #
+  #   · stuck-lock-hours（默认 2 小时）：LOCKED 且锁定时间早于 now-该值 视为"锁太久"并解锁。
+  #     **必须大于支付超时**（单体 mall.order.pay-timeout-minutes 默认 30 分钟），
+  #     否则会误解锁"用户还在待支付窗口内正常锁着"的券，等他支付时核销就会失败。
+  #   · reconcile-cron（默认每天 00:05）：券对时间不敏感，一天一次足够；
+  #     **刻意做成可配置**——验证时我用 --mall.marketing.reconcile-cron="*/20 * * * * *" 起服务
+  #     来实测"它真的会跑"，而不是等到半夜才知道（写死在注解里就没法验）。
+  #   · enabled（默认 true）：一键关掉对账（排障用）。
+  #   · reconcile-batch-size（默认 200）：单轮上限，避免一次处理过多把服务拖住。
+  # =====================================================================
+  marketing:
+    stuck-lock-hours: 2
+    reconcile-cron: "0 5 0 * * ?"
+    reconcile-batch-size: 200
+    reconcile:
+      enabled: true
+  # =====================================================================
+  # P5 步骤 E：事件入口（order.closed → 券解锁兜底；见 mq/OrderClosedConsumer）
+  #   · **默认 false**：false ⇒ config/RabbitMqConfig 整个不装配 ⇒ 拓扑与消费者都不存在，
+  #     本服务**完全不连** RabbitMQ（没有 broker 的机器也能跑全部用例）；
+  #   · 开发环境要打开它：MALL_MQ_ENABLED=true（或 --mall.mq.enabled=true）。
+  #     ⚠️ 刻意**不**写进 application-dev.yaml：profile 专属配置的优先级高于
+  #     src/test/resources/application.properties，写在那里会让每个测试上下文都去连 broker
+  #     （症状是"测试偶尔超时"，最难查的一类）。连接信息放 dev 是安全的（开关为 false 就不建连）。
+  #   · 消费口径 **手动 ack**（spring.rabbitmq.listener.simple.acknowledge-mode=manual，
+  #     这是消费者代码的契约，不是环境差异，所以写在下面公共段里，与 review/user-center 同处放法）。
+  # =====================================================================
+  mq:
+    enabled: ${MALL_MQ_ENABLED:false}
+    # 事件失败重试：最多重投 3 次，每次在重试队列里等 10s（与 review/user-center 同名同默认值）
+    event-max-retry: 3
+    event-retry-delay-ms: 10000
+
+logging:
+  # P8-4：日志带 traceId（只覆盖 pattern.level ⇒ 其余格式不变）
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+  level:
+    com.mall.marketing: info

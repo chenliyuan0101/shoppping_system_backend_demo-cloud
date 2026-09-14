@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.mall</groupId>
+    <artifactId>mall-trade</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>mall-server</name>
+    <description>商城系统后端</description>
+    <properties>
+        <java.version>21</java.version>
+        <mybatis-plus.version>3.5.12</mybatis-plus.version>
+        <!--
+            P1：过渡期单体要注册进 Nacos（服务名 mall-legacy），因此引入 Spring Cloud 生态。
+            版本组合由 P1 spike 实测锁定（见《微服务改造方案.md》附录 E）：
+              Spring Cloud 2025.1.3（官方对齐 Boot 4.0.8，实测在 4.1.1 上可用）
+              Spring Cloud Alibaba 2025.1.0.0（parent = SC 5.0.0 线；不要用 2025.0.0.0，那是 Boot 3.x 线）
+            约束：单体本身仍禁止任何跨域 mapper/domain 依赖，ArchUnit 闸门不受本改动影响。
+        -->
+        <spring-cloud.version>2025.1.3</spring-cloud.version>
+        <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- Web (Spring MVC / Tomcat) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Bean Validation：DTO 声明式校验(@NotBlank/@Min/@Size…)，错误码映射见 GlobalExceptionHandler -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- MyBatis-Plus (Spring Boot 3+ 适配) -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+
+        <!-- MySQL 驱动 -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- =====================================================================
+             P8-4：数据库结构版本管理（Flyway）
+               · 为什么需要：`db/01,02,03.sql` 是"手跑脚本"，谁跑过、跑到哪一版**没有记录**；
+                 换台机器/换个人就靠"照着文档跑一遍"，出错只能靠人眼比对。
+                 Flyway 把"结构到哪一版"变成库里的 `flyway_schema_history` 表 + 可重复的 `migrate`。
+               · 🔴 **必须引 `spring-boot-starter-flyway`，只引 `flyway-core` 会"静默不生效"**：
+                 Spring Boot 4 把自动配置**模块化**了（`spring-boot-flyway` / `spring-boot-jdbc` …），
+                 原来的 `spring-boot-autoconfigure` 里已经**没有** `FlywayAutoConfiguration`。
+                 实测症状：加了 `flyway-core` 之后应用照常启动、**一条 Flyway 日志都没有**、
+                 `flyway_schema_history` 也不会被创建 —— 不报错，所以最难发现。
+               · `flyway-mysql` 是 MySQL 方言模块（Flyway 10 起必须单独引），漏了会在启动时报
+                 "Unsupported Database: MySQL"。
+               · 版本由 Spring Boot BOM 管（`flyway.version`，当前 12.4.0），这里**不写版本号**。
+               · ⚠️ 本机 Maven 仓库（D:\maven\maven_repository）原先**没有**这些构件 ⇒
+                 这两次是**联网**拉的（dependency:get）。此后仍是全程 `-o` 离线。
+             ===================================================================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
+        <!-- 仅用 BCrypt 密码编码(不引入完整 Spring Security 过滤器链) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
+        <!-- MinIO 对象存储客户端：P2 已随文件上传搬到 mall-content，
+             单体不再直接访问对象存储（只转发），依赖同时移除 -->
+
+        <!-- Redis：缓存 / 令牌版本(主动失效) / 限流 / 幂等键 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Elasticsearch 依赖已在 P6-5 #6 **删除**（连同单体的 ES 客户端注入）。
+             背景：索引域早就搬到 mall-search（P6-2/P6-4），单体只剩 `AdminEsController` 的
+             自检/重建两个端点；它们现在是**纯转发**（见 common/client/SearchOpsClient）。
+             留着这个依赖的唯一后果是：依赖、`spring.elasticsearch.*` 配置、证书、连接池全都还在，
+             而 P6-6 也正因此删不掉 `com.mall.demo.pms` 整包与 `@MapperScan`。
+             验收（本批 spec §三 第 5 条）：`grep -r "elasticsearch" backend/demo/src/main` = 0 命中。 -->
+
+        <!-- RabbitMQ：订单超时关单的延迟消息(TTL+死信)；投递失败 fail-open，由兜底扫描任务补偿 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
+        <!-- AOP：方法调用 debug 日志切面 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aspectj</artifactId>
+        </dependency>
+
+        <!-- Swagger UI / OpenAPI 3(springdoc，适配 Spring Boot 4 的 3.x 版本线) -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            P1：服务注册（P8-2 起以 mall-trade 之名注册进 Nacos，供网关 lb:// 路由）。
+            注册名与应用名分离：spring.application.name 仍是 mall-server（日志身份），
+            注册名由 spring.cloud.nacos.discovery.service 指定。
+            测试环境在 src/test/resources/application.properties 里整体关闭注册。
+        -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!--
+            P2：单体开始**出站**调用别的服务（把内容域的管理端写操作与上传转发给 mall-content），
+            因此需要负载均衡器解析 lb://mall-content。与注册中心是两个不同的能力：
+            nacos-discovery 负责"我在哪/别人在哪"，loadbalancer 负责"选哪个实例并发出去"。
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <!--
+            ArchUnit：架构约束测试（P0「边界冻结」，见《微服务改造方案.md》§5 P0 / 附录 D）。
+            只用到核心 API（ClassFileImporter + ArchRule），因此引核心包而非 archunit-junit5。
+            作用：CI 阻断"新增的跨域依赖"，并把存量违规冻结在基线文件里逐条消减（棘轮机制）。
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>1.4.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Spring Boot 4：WebMvc 测试切片(@WebMvcTest/@AutoConfigureMockMvc)独立模块 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <!-- JDK 21+ 默认禁止动态加载 agent，放开以支持 Mockito 内联 mock -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-XX:+EnableDynamicAgentLoading -Djdk.attach.allowAttachSelf=true</argLine>
+                </configuration>
+            </plugin>
+            <!--
+                Lombok 必须显式声明为注解处理器路径。
+                原因：JDK 21 起 javac 不再默认从 classpath 发现注解处理器，只把 lombok 放 <dependencies>
+                会导致 `mvn clean compile` 报"找不到符号 setXxx/getXxx"（IDE 增量编译时不报，容易漏掉）。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

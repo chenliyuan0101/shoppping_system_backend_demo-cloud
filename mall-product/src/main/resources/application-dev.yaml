@@ -1,0 +1,83 @@
+# =====================================================================
+# 本地开发环境：只写"与公共不同的内容"（数据源/密钥）
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848    # 服务端 API 端口（控制台是 8081，别混）
+        namespace: public
+  # Redis：商品域的读缓存 + "待同步索引"兜底集合（mall:es:pending）。
+  # 与单体、user-center、content、review、marketing 共用同一个实例——key 前缀 mall: 是全站约定。
+  # Redis 不可用时 CacheService 一律 fail-open（直查 DB），因此本机没起 Redis 也能跑服务与测试。
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 1s
+  # RabbitMQ（P6-5 #1）：本服务**只发不收**（投递 mall.pms.sync，见 mq/ProductSyncPublisher）。
+  # 连接参数与单体、mall-search 逐字一致（本机开发值）。
+  # ⚠️ 刻意**不**配 publisher-confirm-type / publisher-returns：本服务的投递语义是"交给 broker 即算成功，
+  #    失败（连不上 broker）回落 Redis 待同步集合"；confirm 是异步回调，拿不到同步结论就做不了兜底，
+  #    配上只会造成"看起来有确认其实没人读"的配置项。边界已在 ProductSyncPublisher 的类注释里写明。
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    connection-timeout: 3s
+  # 本服务自己的库：mall_product（表结构见 db/01-mall_product-schema.sql）
+  # ⚠️ 与单体连的 mall 是**两个库**：P6-1 只把数据复制过来，真值仍在 mall；
+  #    测试基类会用 `SELECT DATABASE()` 断言"确实连的是 mall_product"（防止假绿）。
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/mall_product?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    # P8-4：**最小权限账号**（不再用 root）—— 只对 mall_product.* 有权限，全局只有 USAGE。
+    #   实测边界：用这个账号读别的库会 ERROR 1142 ⇒ "有没有代码偷偷跨库"从"静默成功"变成"立刻报错"。
+    #   账号：backend/mall-cloud/db/accounts/01-create-schema-accounts.sql
+    username: mall_product
+    password: dev-only-2026
+
+logging:
+  level:
+    com.mall.product: debug
+    org.apache.ibatis: debug
+    org.springframework.web.servlet.DispatcherServlet: debug
+
+mall:
+  # 内部接口共享密钥：既要校验**别人调我**（/internal/**），也要在**我调别人**时带上。
+  # 与单体、user-center、content、review、marketing 保持一致（同一把钥匙）；
+  # 生产走 MALL_INTERNAL_TOKEN 环境变量。
+  internal:
+    token: mall-dev-only-internal-token-change-me
+  # 网关身份凭据。请求带这个头（值相同）时，本服务**信任**网关注入的 X-Member-Id（§4.4 ①），
+  # 不再自己验签/查库。必须与网关的 mall.gateway.auth-token 逐字一致（本机开发值取自网关 dev 配置）。
+  # ⚠️ P6-1 期没有任何端点用到它（见 config/WebConfig 的类注释）；未配置时 fail-closed。
+  gateway:
+    auth-token: mall-dev-only-gateway-token-change-me
+  # 检索域地址（P6-3）：关键字分支交给 mall-search。
+  # 默认走服务发现（与生产同一形状）；本机调试/降级演练可用环境变量
+  #   MALL_SEARCH_BASE_URL=http://127.0.0.1:9   ← 指向死端口，验"检索不可用时前台仍可用"
+  # 直接指定直连地址（如 http://127.0.0.1:8103）也支持：客户端里 base-url 不以 lb:// 开头时不走发现。
+  search:
+    base-url: ${MALL_SEARCH_BASE_URL:lb://mall-search}
+    # 超时照 P2 实测口径：下游冷启动首调实测 1.98s，照抄"目标值 300ms"会把正常请求判成故障
+    connect-timeout-ms: 300
+    read-timeout-ms: 2500
+  # 管理端 JWT 的**验签密钥**（P6-1b）：只验签、不签发。
+  # ⚠️ 必须与单体/网关**逐字同一把**（本机开发值取自单体 dev 配置），
+  #    不同密钥的表现是"后台接口一律 401" —— 最容易被误判成"拦截器写错了"。
+  # ⚠️ 不配或短于 32 位 ⇒ **启动直接失败**（与单体同一条安全加固：不给源码级兜底密钥）。
+  jwt:
+    secret: mall-dev-only-secret-0123456789abcdef-change-me
+    # 与单体逐字一致（单体 application-dev.yaml 是 24）。本服务**只验签不签发**，
+    # 这个值不参与校验（有效期读令牌自带的 exp），保留它是为了配置项对齐 + 启动日志可对照。
+    expire-hours: 24

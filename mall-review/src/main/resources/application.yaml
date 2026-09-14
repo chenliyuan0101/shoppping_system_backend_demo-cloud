@@ -1,0 +1,86 @@
+# =====================================================================
+# mall-review 公共配置（与环境无关的放这里；环境相关/涉密放 application-{dev,prod}.yaml）
+# 抽服务模板：端口/注册名/数据源/出站调用/监控端点 五项，与 user-center、content 同一套
+# =====================================================================
+server:
+  port: 8104              # 方案 §2.2 的服务端口规划（8101~8108）
+
+spring:
+  application:
+    name: mall-review     # 应用名 = 注册名（网关按 lb://mall-review 路由）
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    # 业务时区口径：MQ 事件里的时间戳转 datetime 走的是 support/MallTime.ZONE（Asia/Shanghai），
+    # 与这里以及 JDBC 的 serverTimezone 必须一致，否则读模型里的 finished_time 会整体偏 8 小时。
+    time-zone: GMT+8
+  cloud:
+    nacos:
+      discovery:
+        service: mall-review
+        register-enabled: true
+  # RabbitMQ 监听口径：**手动 ack**（成功 ack / 失败重投或进死信）——这是消费者代码的契约，
+  # 不是环境差异，所以放在公共配置里（与 user-center 同一处放法）。
+  # P4-2 起本服务真的有消费者了（com.mall.review.mq.OrderFinishedConsumer），这条配置因此是**硬前提**：
+  #   autoAck + 投影失败 = 静默丢待评价数据（用户再也看不到"待评价"入口），或毒消息无限重入。
+  # 连接信息（host/port/账号）在 application-{dev,prod}.yaml。
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        concurrency: 1
+        max-concurrency: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# =====================================================================
+# 业务参数
+# =====================================================================
+mall:
+  # 缓存总开关：false = 完全不使用 Redis（纯 DB 逻辑）
+  cache:
+    enabled: true
+  # =====================================================================
+  # P4-2：评价域的事件入口（order.finished → review_pending_item 投影）
+  #   · **默认 false**：false = 消费者与拓扑都不装配 → 本服务**完全不连** RabbitMQ，
+  #     没有 broker 的机器也能跑全部用例（test classpath 的 application.properties 同样写 false）；
+  #   · 开发环境要打开它：`MALL_MQ_ENABLED=true`（或 --mall.mq.enabled=true）。
+  #     ⚠️ 刻意**不**写进 application-dev.yaml：profile 专属配置的优先级高于
+  #     src/test/resources/application.properties，写在那里会让每一个测试上下文都去连 broker
+  #     （"本机没起 RabbitMQ 就跑不了测试"），而且症状是"测试偶尔超时"这种最难查的形态。
+  #   · 队列名是本服务自己的 mall.review.order-finished（拓扑见 support/MqTopology）：
+  #     "同名队列 = 竞争消费"，不能与单体 mall.oms.events / user-center mall.user.notification 共用。
+  # =====================================================================
+  mq:
+    enabled: ${MALL_MQ_ENABLED:false}
+    # 事件失败重试：最多重投 3 次，每次在重试队列里等 10s（与 user-center 同名同默认值）
+    event-max-retry: 3
+    event-retry-delay-ms: 10000
+  # 注意：评价业务参数（可评价天数、晒图张数上限）**故意不在这里预留**——
+  # 单体 pms 现在把它们写在代码常量里，搬过来时必须先读出**真实值**再决定放哪；
+  # 现在凭印象填一个数字，等于造一个"看起来像契约、其实没人读过"的配置项。
+  # =====================================================================
+  # P4-3：评价业务参数（随评价代码一起从单体搬来）
+  #   · limit-days 是**逐字搬来的契约**：错误文案「已超过 {limitDays} 天可评价期限」里的数字
+  #     就是这个值拼接出来的（单体 application.yaml 原来也是 90）。
+  #     两边的**默认值也必须一样（90）**：拆服务后如果本服务漏配，文案里的数字不能变。
+  #   · 它同时决定"提交评价时是否拒绝超期明细"，所以不只是文案问题。
+  # =====================================================================
+  comment:
+    limit-days: 90            # 订单确认收货后可评价天数（与单体同名同值；文案里的天数由它拼接）
+
+logging:
+  # P8-4：日志带 traceId（只覆盖 pattern.level ⇒ 其余格式不变）
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+  level:
+    com.mall.review: info

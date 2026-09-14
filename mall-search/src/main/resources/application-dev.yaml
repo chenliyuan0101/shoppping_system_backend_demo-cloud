@@ -1,0 +1,72 @@
+# =====================================================================
+# 本地开发环境：只写"与公共不同的内容"（ES/Redis/RabbitMQ/密钥）
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848    # 服务端 API 端口（控制台是 8081，别混）
+        namespace: public
+  # =====================================================================
+  # Elasticsearch(本地)：ES 9 默认开启安全 → 必须 https + 账号
+  # 证书是 ES 自签的 http_ca.crt，通过 SSL bundle 挂信任链。
+  # ⚠️ 属性名与值**逐字取自单体的 application-dev.yaml**（那是被验证过的口径）：
+  #    uris / username / password / connection-timeout / socket-timeout / restclient.ssl.bundle=es
+  # ⚠️ 探测 ES 的正确姿势（本项目已踩 3 次）：`curl -s -k -u elastic:...`；
+  #    Windows curl 走 schannel，`--cacert` 会 exit 60 而 `-s` 把它吞掉 → 看起来像"ES 空了"。
+  # =====================================================================
+  elasticsearch:
+    uris: https://127.0.0.1:9200
+    username: elastic
+    password: "elasticsearch123456"
+    connection-timeout: 2s
+    socket-timeout: 5s
+    restclient:
+      ssl:
+        bundle: es
+  ssl:
+    bundle:
+      pem:
+        es:
+          truststore:
+            certificate: D:/elasticsearch/elasticsearch-9.5.3/config/certs/http_ca.crt
+  # Redis：**只用于**"待同步索引"兜底集合 mall:es:pending。
+  # 与单体、其它服务共用同一个实例——key 前缀 mall: 是全站约定。
+  # 不可用时 CacheService 一律 fail-open，因此本机没起 Redis 也能跑服务与测试。
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 1s
+  # RabbitMQ：**拓扑名与声明参数都不改**（mall.pms.sync / mall.pms.es-sync(+.retry/.dlq)）。
+  # 连接参数与单体一致（含 publisher-confirm-type / publisher-returns）。
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    connection-timeout: 3s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+logging:
+  level:
+    com.mall.search: debug
+    org.springframework.web.servlet.DispatcherServlet: debug
+
+mall:
+  # 内部接口共享密钥：既要校验**别人调我**（/internal/**），也要在**我调别人**时带上。
+  # 与单体、user-center、content、review、marketing、product 保持一致（同一把钥匙）；
+  # 生产走 MALL_INTERNAL_TOKEN 环境变量。
+  internal:
+    token: mall-dev-only-internal-token-change-me
+  product:
+    base-url: ${MALL_PRODUCT_BASE_URL:lb://mall-product}

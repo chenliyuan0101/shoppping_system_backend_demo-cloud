@@ -1,0 +1,45 @@
+
+<!--  http://localhost:8080/rapidoc.html-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>商城系统 API 调试台（RapiDoc）</title>
+  <!-- 更美观的接口文档 + 在线调试界面；数据源为后端 /v3/api-docs -->
+  <script type="module" src="https://unpkg.com/rapidoc/dist/rapidoc-min.js"></script>
+</head>
+<body style="margin:0">
+  <rapi-doc
+    id="thedoc"
+    spec-url="/v3/api-docs"
+    theme="dark"
+    render-style="read"
+    schema-style="table"
+    schema-expand-level="1"
+    show-header="true"
+    header-color="#24292e"
+    primary-color="#4f8cff"
+    font-size="largest"
+    regular-font="system-ui"
+    allow-authentication="true"
+    api-key-name="Authorization"
+    api-key-location="header"
+    persist-auth="true"
+    fill-request-fields-with-example="true"
+    fill-request-fields-with-default="true"
+    show-method-in-nav-bar="true"
+    use-path-in-nav-bar="true"
+    allow-spec-url-load="false"
+    allow-spec-file-load="false"
+    show-info="true"
+    show-components="true"
+    show-curl-before-try="true"
+    show-advanced-in-try="true"
+    default-schema-tab="schema"
+    nav-bg-color="#1c1f26"
+    nav-text-color="#dfe3ea"
+  >
+  </rapi-doc>
+</body>
+</html>

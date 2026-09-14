@@ -1,0 +1,106 @@
+# =====================================================================
+# mall-admin 公共配置（环境无关的放这里；环境相关/涉密放 application-{dev,prod}.yaml）
+# =====================================================================
+server:
+  port: 8108              # 方案 §2.2 端口规划
+
+spring:
+  application:
+    name: mall-admin      # 应用名 = 注册名（网关按 lb://mall-admin 路由）
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  cloud:
+    nacos:
+      discovery:
+        service: mall-admin
+        register-enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+mall:
+  cache:
+    enabled: true
+  # JWT：**与网关/单体同一把密钥**。本服务是管理端令牌的**签发方**（登录）
+  # —— 密钥值在 application-dev.yaml（明文）/ 生产用 MALL_JWT_SECRET 环境变量。
+  # ⚠️ 密钥不一致的表现是"网关验签全部失败 → 登录成功后所有后台接口 401"，这是最容易被
+  #    误判成"网关坏了"的坑（P6-1b 已在 product 侧记过一次）。
+  jwt:
+    expire-hours: 24
+  admin:
+    # =================================================================
+    # P7 §2.5：管理端状态缓存（网关 403 判据的写入方）
+    # =================================================================
+    # 对账间隔：读 sys_user.status 回填/纠正 mall:cache:admin:status:{id}，
+    # 并在"启用→禁用"跃迁时 bump 令牌版本。默认 10s（配置项名与 search 的
+    # mall.search.sync-interval-ms 同一套写法：毫秒、fixedDelay）。
+    # ⚠️ 为什么需要它：**今天没有"禁用管理员"的入口**（禁用 = 直接改 sys_user），
+    #    少了它，"403 账号已被禁用"这条文案在路由切换后**永远到不了**。
+    status-reconcile-enabled: true
+    status-reconcile-interval-ms: 10000
+    status-reconcile-initial-delay-ms: 10000
+    auth:
+      # =================================================================
+      # 管理端身份来源（P7 §2 的过渡开关，默认 false = 过渡态）
+      # =================================================================
+      # false（默认，本批交付的行为）：**优先信任网关注入的身份**（X-Gateway-Auth + X-Admin-Id），
+      #   凭据不可信/缺失时回落到"本地验签 + 查 sys_user + 令牌版本"这条**与单体逐字一致**的老路。
+      #   ⇒ 直连 8108 用真实管理员令牌仍可用（= 今天单体 8080 的行为，C1 逐字不变），
+      #     而经网关的请求走身份头（不重复验签），这就是 P7 §2 要求保留的"可回退中间态"。
+      # true（P7 §2 的目标形态，待网关 admin 验签**上线并验证过**之后才可切）：只认网关注入的身份，
+      #   缺失/不可信一律 401「未登录」——与 user-center 的 fail-closed 口径相同。
+      #   ⚠️ 切 true 的前提是网关路由已指向本服务（`/api/admin/auth/**`），否则管理端登录会被自己关在门外。
+      require-gateway-identity: false
+    # ===================================================================
+    # P7 后半：看板（§3）
+    # ===================================================================
+    dashboard:
+      # 短 TTL 缓存（分钟级）。0 或 cache-enabled=false ⇒ 每次都实时聚合（排障用）
+      cache-enabled: true
+      cache-ttl-seconds: 60
+      # 并行聚合线程池大小（一次 summary 同时占 3 个线程；下限 3 由 DashboardExecutorConfig 兜住）
+      parallelism: 8
+
+  # ===================================================================
+  # 出站调用目标（P7 后半）
+  # ===================================================================
+  # 三处都是**内部契约**（/internal/v1/**，网关不路由、X-Internal-Token 把守）：
+  #   · trade      = 交易域。**今天物理上仍是单体**（注册名 mall-legacy），
+  #                  因此这里指的是单体 —— 交易域独立成服务那天只改这一行。
+  #   · product    = mall-product（在架商品数 / 销量榜 / SPU 批量快照）
+  #   · user-center= mall-user-center（会员分页主查 / 档案快照 / 总数 / 启停写契约）
+  # ⚠️ 不以 lb:// 开头时会**绕过服务发现**直连（http://127.0.0.1:9 这种写法就是"依赖不可用"的
+  #    演练方式，见降级矩阵用例 AdminDashboard{Trade,Product,User}DownTest 三个子类）。
+  # ⚠️ 超时口径照 P2 实测：连接 300ms、读 2500ms（下游冷启动首调实测 1.98s，写 300ms 会把正常请求判成故障）。
+  trade:
+    base-url: ${MALL_TRADE_BASE_URL:lb://mall-trade}
+    connect-timeout-ms: 300
+    read-timeout-ms: 2500
+  product:
+    base-url: ${MALL_PRODUCT_BASE_URL:lb://mall-product}
+    connect-timeout-ms: 300
+    read-timeout-ms: 2500
+  user-center:
+    base-url: ${MALL_USER_CENTER_BASE_URL:lb://mall-user-center}
+    connect-timeout-ms: 300
+    read-timeout-ms: 2500
+  # 服务间共享密钥（与单体/product/user-center 的 mall.internal.token 逐字一致）。
+  # 值在 application-dev.yaml（明文）/ 生产用 MALL_INTERNAL_TOKEN 环境变量注入。
+  internal:
+    token: ""
+
+logging:
+  # P8-4：日志带 traceId（只覆盖 pattern.level ⇒ 其余格式不变）
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+  level:
+    com.mall.admin: info

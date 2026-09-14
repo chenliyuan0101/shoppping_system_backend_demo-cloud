@@ -1,0 +1,90 @@
+# =====================================================================
+# 本地开发环境：只写“与公共不同的内容”(数据源/日志/MinIO/JWT 明文)
+# 本文件不应进生产；提交 Git 时注意是否入库(涉密码)
+# =====================================================================
+spring:
+  # Nacos(本地)：P8-2 起单体注册为 mall-trade，供网关按服务名路由
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848    # 服务端 API 端口（控制台是 8081，别混）
+        namespace: public
+  # Redis(本地)：缓存 / 令牌版本 / 限流 / 幂等键
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 1s
+  # RabbitMQ(本地)：只用于订单超时关单的延迟消息；连不上时投递 fail-open(由兜底扫描补偿)
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    connection-timeout: 3s
+    publisher-confirm-type: correlated   # 投递确认(消息到交换机)
+    publisher-returns: true              # 路由失败(交换机到不了队列)时可感知
+    listener:
+      simple:
+        acknowledge-mode: manual         # 手动 ack：成功 ack，失败 nack 进死信队列
+        prefetch: 10
+        concurrency: 1
+        max-concurrency: 2
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/mall_trade?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    # =====================================================================
+    # P8-4：**最小权限账号**（不再用 root）
+    #   账号由 backend/mall-cloud/db/accounts/01-create-schema-accounts.sql 建好：
+    #     只对 `mall_trade`.* 有 SELECT/INSERT/UPDATE/DELETE/CREATE/DROP/INDEX/ALTER，
+    #     全局权限只有 USAGE（= 零权限）；实测 `SELECT … FROM mall.oms_order` ⇒ **ERROR 1142**。
+    #   这条边界不只是"安全好看"：它把"**还有代码在偷偷读别的库**"从"静默成功"变成"**立刻报错**" ——
+    #   P8-5 要删 `mall` 的残余表，前置就是"没有任何服务再读 mall"，而这个账号让这句话**可执行地成立**。
+    #   ⚠️ 测试期不走这个账号：真库套件的 fixture 要写 `mall_user`/`mall_product`/`mall_review`（跨库），
+    #      见 src/test/resources/application.properties 里的显式 root 覆盖与理由。
+    # =====================================================================
+    username: mall_trade
+    password: dev-only-2026
+
+# =====================================================================
+# 日志：dev 开 debug(方法调用 + SQL + HTTP 路由)
+# =====================================================================
+logging:
+  level:
+    com.mall.demo: debug                      # 业务代码 + MethodLogAspect
+    org.apache.ibatis: debug                  # 每条 SQL(Preparing/Parameters)
+    org.springframework.web.servlet.DispatcherServlet: debug   # 每个 HTTP 请求路由
+
+# =====================================================================
+# JWT(开发密钥)；生产用 application-prod 的环境变量
+#
+# ⚠️ P2：`mall.minio.*`(MinIO 端点/账号/桶) 已随文件上传搬到 mall-content，
+#    单体不再直接访问对象存储——它只把字节转发给内容域（唯一的存储方）。
+#    对象存储的配置现在在 backend/content/src/main/resources/application-dev.yaml。
+# =====================================================================
+mall:
+  # 缓存总开关：false=完全不使用 Redis(纯 DB 逻辑；Redis 故障时也会自动降级)
+  cache:
+    enabled: true
+  image:
+    placeholder-url: http://localhost:9000/mall/seed/placeholder.png
+  jwt:
+    secret: mall-dev-only-secret-0123456789abcdef-change-me
+    expire-hours: 24
+  # 内部接口共享密钥（/internal/**，仅本机开发用明文；生产走 MALL_INTERNAL_TOKEN 环境变量）
+  # 出站调用内容域时也带这一把钥匙（两个服务必须一致，否则内部调用被 fail-closed 拒绝）
+  internal:
+    token: mall-dev-only-internal-token-change-me
+  # P3：网关身份凭据。请求带这个头（值相同）时，单体**信任**网关注入的 X-Member-Id，
+  # 不再自己验签/查库（§4.4 ①）。与网关的 mall.gateway.auth-token 必须一致；
+  # 未配置时 fail-closed → 所有请求走"自己验签"的老路（安全但慢），不会静默信任客户端。
+  gateway:
+    auth-token: mall-dev-only-gateway-token-change-me

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  mall-marketing：营销域服务（优惠券：模板 / 发放 / 三态核销）
+
+  版本组合沿用 P1 spike 实测锁定、P2/P3/P4 已跑通的同一套（见《微服务改造方案.md》附录 E）：
+    Spring Boot 4.1.1 + Spring Cloud 2025.1.3 + Spring Cloud Alibaba 2025.1.0.0 + Nacos 3.2.4
+
+  ⚠️ 本服务**不依赖单体**（没有共享 jar）：
+    共享内核（ApiResponse/BusinessException/GlobalExceptionHandler…）是**本服务自持的副本**，
+    放在 com.mall.marketing.support 下。理由见方案 §2.8/§4.10：
+    跨服务共享 jar 会把"各自的演进"重新绑死，契约靠"逐字相同 + 契约测试"守。
+
+  ⚠️ 批次范围（每批独立可验收，见 .dsh-notes/P5-remaining-plan.md / P5-batch2-3-plan.md）：
+     · 批次 1（已完成）：骨架 + 建库迁数据 + 券三态 + 5 个 /internal 券接口 + 真库用例；
+     · 批次 2（本批）：会员侧 3 个公开端点（available / {templateId}/receive / mine）迁入，
+       并把**限流**一起搬过来（否则悄悄放宽了对外行为）→ 本批**新增** Redis 依赖；
+     · 仍**没有** springdoc/OpenAPI：本批之前对外没有任何端点，文档面等端点集稳定后再配
+       （免得留下"文档里全是内部端点"的误导）。
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.mall</groupId>
+    <artifactId>mall-marketing</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>mall-marketing</name>
+    <description>商城系统营销服务：优惠券模板/发放/三态核销（UNUSED-LOCKED-USED）</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <mybatis-plus.version>3.5.12</mybatis-plus.version>
+        <spring-cloud.version>2025.1.3</spring-cloud.version>
+        <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- 本服务自己的库：mall_marketing（sms_coupon / sms_coupon_member，见 db/01-*.sql） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          Redis：**只用于接口限流计数**（领券 `mall:rl:coupon_receive:{identity}`，见 support/CacheService）。
+          P5 批次 2 必须带上它，否则"限流跟着端点一起搬走"这句话落不了地——
+          而限流是**对外行为**的一部分：搬端点不搬限流 = 悄悄把领券的防刷能力取消了。
+          与单体/其它服务共用同一个 Redis 实例（key 前缀 mall:）。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- AOP：方法调用 debug 日志切面 + 限流切面（与单体/其它服务同一套，便于跨服务排查） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aspectj</artifactId>
+        </dependency>
+
+        <!--
+          RabbitMQ（P5 步骤 E 起）：消费单体发的 `order.closed`，做**券解锁的第二道防线**。
+            · 为什么需要：关单时的**同步** unlock 只在"目标服务当时可达"时有效；服务重启/网络抖动
+              都可能让它失败，那张券就停在 LOCKED（对外显示"已使用"，用户既用不了也看不见）；
+            · 开关 `mall.mq.enabled` **默认 false**：false ⇒ 拓扑与消费者都不装配 ⇒ 本服务完全不连
+              broker（没有 RabbitMQ 的机器也能跑全部用例）。开发要显式打开：
+              `MALL_MQ_ENABLED=true` 或命令行传 `mall.mq.enabled=true`；
+              （⚠️ XML 注释里不能出现连续两个减号，所以这里不写带前缀的完整开关名。）
+            · 拓扑与 ack 口径见 support/MqTopology 与 config/RabbitMqConfig（与 review/user-center 同构）。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- 注册中心：注册名 mall-marketing（批次 2 起网关按 lb://mall-marketing 路由） -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!--
+          出站调用也要走服务发现（P5 步骤 C 起）：后台"领取记录"调 user-center 的
+          POST /internal/v1/user/member/batch 取会员用户名/昵称（**不直连 ums_member**）。
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-XX:+EnableDynamicAgentLoading -Djdk.attach.allowAttachSelf=true</argLine>
+                </configuration>
+            </plugin>
+            <!-- Lombok 注解处理器显式声明（JDK 21 起 javac 不再从 classpath 自动发现） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

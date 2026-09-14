@@ -1,0 +1,55 @@
+# =====================================================================
+# 生产环境：敏感项全部用环境变量占位（缺失即启动失败，强制注入）
+#   SPRING_PROFILES_ACTIVE=prod \
+#   DB_URL=jdbc:mysql://<host>:3306/mall_marketing?... DB_USERNAME=xxx DB_PASSWORD=xxx \
+#   NACOS_SERVER_ADDR=nacos:8848 \
+#   MALL_INTERNAL_TOKEN=<与其它服务同一把> MALL_GATEWAY_AUTH_TOKEN=<与网关同一把> \
+#   java -jar mall-marketing.jar
+#
+# ⚠️ MALL_INTERNAL_TOKEN 未注入时：/internal/** 全部 403（fail-closed）——
+#    本服务的**全部**对外能力都在 /internal/**，所以漏配的表现是"trade 一下单就报内部接口鉴权失败"，
+#    而不是"悄悄对外开放了核销能力"。
+# ⚠️ MALL_GATEWAY_AUTH_TOKEN 未注入时本服务**不信任任何身份头** → 批次 2 的公开端点全部 401。
+#   REDIS_HOST/PORT 是限流计数的落点：**连不上时 fail-open**（限流放行、业务照常），
+#   因此 Redis 抖动不会让领券接口不可用，但会暂时失去防刷（要有这个监控预期）。
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1s
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+logging:
+  level:
+    root: info
+    com.mall.marketing: info
+    org.apache.ibatis: info
+
+mall:
+  cache:
+    enabled: ${MALL_CACHE_ENABLED:true}
+  internal:
+    token: ${MALL_INTERNAL_TOKEN:}
+  gateway:
+    auth-token: ${MALL_GATEWAY_AUTH_TOKEN:}

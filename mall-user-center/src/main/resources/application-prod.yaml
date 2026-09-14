@@ -1,0 +1,79 @@
+# =====================================================================
+# 生产环境：敏感项全部用环境变量占位（缺失即启动失败，强制注入）
+#   SPRING_PROFILES_ACTIVE=prod \
+#   DB_URL=jdbc:mysql://<host>:3306/mall_user?... DB_USERNAME=xxx DB_PASSWORD=xxx \
+#   REDIS_HOST=redis NACOS_SERVER_ADDR=nacos:8848 \
+#   MALL_JWT_SECRET=<与网关同一把，≥32 位>  MALL_INTERNAL_TOKEN=<与其它服务同一把> \
+#   java -jar mall-user-center.jar
+#
+# ⚠️ MALL_JWT_SECRET 必须与网关完全一致，否则网关验签全部失败（全站 401）。
+#    这是"共享密钥"方案的运维硬约束：轮换密钥要网关与用户中心**同时**发布。
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1s
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  # RabbitMQ：消费领域事件写站内消息（P3-5）。**必须与单体连同一个 broker / 同一个 vhost**，
+  # 否则本服务看不到 mall.oms.event 上的事件（交换机是发布方与消费方共享的契约）。
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 3s
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+logging:
+  level:
+    root: info
+    com.mall.usercenter: info
+    org.apache.ibatis: info
+
+mall:
+  cache:
+    enabled: ${MALL_CACHE_ENABLED:true}
+  # MQ 总开关（站内消息链路的入口）：false = 完全不连 RabbitMQ，通知会停在队列里不落库，
+  # 排障时用来把"MQ 抖动"与"业务问题"分开。默认必须为 true（本服务是通知的唯一写入方）。
+  mq:
+    enabled: ${MALL_MQ_ENABLED:true}
+  jwt:
+    secret: ${MALL_JWT_SECRET}
+    expire-hours: ${MALL_JWT_EXPIRE_HOURS:24}
+  internal:
+    token: ${MALL_INTERNAL_TOKEN:}
+  # P3：网关身份凭据（与网关 MALL_GATEWAY_AUTH_TOKEN 必须一致）。
+  # 未注入 → 本服务不信任任何身份头 → 所有需要登录的接口 401（fail-closed，不会静默越权）。
+  gateway:
+    auth-token: ${MALL_GATEWAY_AUTH_TOKEN:}
+  # 商品域快照（购物车/收藏/足迹展示）：默认走服务发现；P6 商品域独立后改 lb://mall-product，
+  # 应急可注入 http://<host>:8080 直连（客户端检测到非 lb:// 会自动绕过负载均衡器）
+  product:
+    base-url: ${MALL_PRODUCT_BASE_URL:lb://mall-product}

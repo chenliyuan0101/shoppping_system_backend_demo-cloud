@@ -1,0 +1,75 @@
+# =====================================================================
+# mall-product 公共配置（与环境无关的放这里；环境相关/涉密放 application-{dev,prod}.yaml）
+# 抽服务模板：端口/注册名/数据源/监控端点 五项，与 user-center、content、review、marketing 同一套
+# =====================================================================
+server:
+  port: 8102              # 方案 §2.2 的服务端口规划（8101~8108）
+
+spring:
+  application:
+    name: mall-product    # 应用名 = 注册名（P6-4 起网关按 lb://mall-product 路由；P6-1 不切路由）
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    # 业务时区口径：与 support/MallTime.ZONE 以及 JDBC 的 serverTimezone 三处必须一致。
+    # 对商品域具体影响：pms_spu.create_time/update_time 的展示、"新品(newest)"排序
+    # （SpuMapper 的 ORDER BY create_time DESC）在跨时区机器上会漂移。
+    time-zone: GMT+8
+  cloud:
+    nacos:
+      discovery:
+        service: mall-product
+        register-enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# =====================================================================
+# 业务参数
+# =====================================================================
+mall:
+  # 缓存开关：false = 完全不使用 Redis（纯 DB 逻辑；Redis 不可用时也会自动降级，fail-open）
+  # 对商品域意味着：类目树/品牌/货架/详情每次都直查库，行为正确但更慢。
+  cache:
+    enabled: true
+  # =====================================================================
+  # 缺图兜底：后台新增商品未传主图时用它。
+  #
+  # ⚠️ 值**逐字**取自单体 application-dev.yaml 的 mall.image.placeholder-url：
+  #    单体的 AdminAuthProductMySqlTest 断言 `mainImage` 含 "placeholder"
+  #    （"新建商品未传主图 → 自动用占位图(不再撞 DB NOT NULL 报 500)"那条用例）——
+  #    凭印象换一个 URL 会让搬过来的用例失去意义，也会让新老行为不一致。
+  # =====================================================================
+  image:
+    placeholder-url: http://localhost:9000/mall/seed/placeholder.png
+  # =====================================================================
+  # 商品检索（Elasticsearch）**本批不配置**：
+  #   · 本服务 P6-1 没有 ES 客户端（属 P6-2 的 mall-search），
+  #     单体的 mall.search.title-analyzer / sync-interval-ms 在这里**没有任何读取方**，
+  #     写进来就是"看起来生效其实没人读"的配置项（P4 在 mall-review 踩过同一个坑）。
+  #   · P6-2 接入检索时，这两个参数的落点与语义在 search 侧重新定义，
+  #     本服务只保留"调用点 + 降级"（见 service/ProductSearchService 的类注释）。
+  # =====================================================================
+  # =====================================================================
+  # MQ 开关（P6-5 #1）：true = 库存/销量变更后投递 mall.pms.sync（亚秒级通道，主）
+  #                     false = 只写本地 Redis 待同步集合（search 定时任务 15s 收敛，兜底）
+  # ⚠️ 语义与单体/其它服务**逐字一致**（matchIfMissing=true：不配就是开）：
+  #    检索新鲜度是本服务的产出质量指标，默认关掉等于默认让索引慢半拍。
+  # ⚠️ 本模块的真库用例把它置 false（见 ProductTestBase）：单测的成败不该取决于外面是否正好跑着 broker。
+  # =====================================================================
+  mq:
+    enabled: true
+
+logging:
+  # P8-4：日志带 traceId（只覆盖 pattern.level ⇒ 其余格式不变）
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+  level:
+    com.mall.product: info

@@ -1,0 +1,59 @@
+# =====================================================================
+# 本地开发环境：只写"与公共不同的内容"（数据源/密钥）
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848    # 服务端 API 端口（控制台是 8081，别混）
+        namespace: public
+  # Redis（P5 批次 2 起需要）：**只用于领券限流计数**（mall:rl:coupon_receive:*）。
+  # 与单体、user-center、content、review 共用同一个实例——key 前缀 mall: 是全站约定。
+  # Redis 不可用时 fail-open（限流放行、业务照常），因此本机没起 Redis 也能跑服务与测试。
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 1s
+  # 本服务自己的库：mall_marketing（表结构见 db/01-mall_marketing-schema.sql）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/mall_marketing?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    # P8-4：最小权限账号（只对 mall_marketing.* 有权限；跨库读会 ERROR 1142）
+    username: mall_marketing
+    password: dev-only-2026
+  # RabbitMQ（P5 步骤 E 起）：**只在 mall.mq.enabled=true 时才会被连接**（见 config/RabbitMqConfig 的
+  # @ConditionalOnProperty）。这里把连接信息放在 dev 是安全的：开关为 false 时拓扑与消费者都不装配，
+  # 本服务根本不建连——所以"没有 broker 的机器也能跑全部用例"这条依然成立。
+  # 消费的是单体发的 order.closed（券解锁兜底），队列是本服务自己的 mall.marketing.order-closed。
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+
+logging:
+  level:
+    com.mall.marketing: debug
+    org.apache.ibatis: debug
+    org.springframework.web.servlet.DispatcherServlet: debug
+
+mall:
+  # 内部接口共享密钥：既要校验**别人调我**（/internal/**），也要在**我调别人**时带上。
+  # 与单体、user-center、content、review 保持一致（同一把钥匙）；
+  # 生产走 MALL_INTERNAL_TOKEN 环境变量。
+  internal:
+    token: mall-dev-only-internal-token-change-me
+  # 网关身份凭据。请求带这个头（值相同）时，本服务**信任**网关注入的 X-Member-Id（§4.4 ①），
+  # 不再自己验签/查库。必须与网关的 mall.gateway.auth-token 逐字一致（本机开发值取自网关 dev 配置）。
+  # ⚠️ 未配置时 fail-closed：**所有会员侧公开端点会 401「未登录」**（本服务没有"自己验签"这条退路），
+  #    而 /internal/** 不受影响（它们走 X-Internal-Token）。
+  gateway:
+    auth-token: mall-dev-only-gateway-token-change-me

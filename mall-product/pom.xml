@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  mall-product：商品域服务（SPU / 详情 / SKU / 库存 / 库存流水 / 类目 / 品牌）
+
+  ⚠️ 本文件是**照抄 backend/mall-cloud/mall-marketing/pom.xml 的骨架**得到的（P6-1 的硬要求：
+  版本组合与它完全一致，不重新选型）。版本组合沿用 P1 spike 实测锁定、P2~P5 已跑通的同一套
+  （见《微服务改造方案.md》附录 E）：
+    Spring Boot 4.1.1 + Spring Cloud 2025.1.3 + Spring Cloud Alibaba 2025.1.0.0 + Nacos 3.2.4
+  MyBatis-Plus 3.5.12、JDK 21。
+
+  ⚠️ 本服务**不依赖单体**（没有共享 jar）：
+    共享内核（ApiResponse/BusinessException/GlobalExceptionHandler/PageKit/CacheService…）
+    是**本服务自持的副本**，放在 com.mall.product.support 下（内容逐字保留、只换包名）。
+    理由见方案 §2.8/§4.10：跨服务共享 jar 会把"各自的演进"重新绑死，契约靠"逐字相同 + 契约测试"守。
+
+  ⚠️ 批次范围（见 .dsh-notes/P6-plan.md 与 P6-1-spec.md）：
+     · P6-1（本批）：骨架 + 建库迁数据（6 张白名单表）+ 内部接口原样搬 + 真库用例；
+       **不切任何流量、不改网关路由、不删单体的 pms 包**。
+     · 依赖纪律：**按编译驱动加依赖**——所以这里**没有** RabbitMQ（P6-1 不需要 MQ）、
+       **没有** Elasticsearch 客户端（那是 P6-2 的 mall-search）、**没有** LoadBalancer
+       （本批没有任何出站调用）。加了它们只会让"这个服务到底依赖什么"变得不可信。
+     · springdoc 是**编译驱动**加的：前台 4 条 + 后台 16 条端点的 Controller 上就写着
+       @Tag/@Parameter/@ParameterObject（原样从单体搬来，不删注解=不改契约面），
+       与 mall-content/mall-review/mall-user-center 的选型一致（版本 3.1.0，同一处写法）。
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.mall</groupId>
+    <artifactId>mall-product</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>mall-product</name>
+    <description>商城系统商品服务：SPU/详情/SKU/库存与流水/类目/品牌</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <mybatis-plus.version>3.5.12</mybatis-plus.version>
+        <spring-cloud.version>2025.1.3</spring-cloud.version>
+        <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- 本服务自己的库：mall_product（pms_spu / pms_spu_detail / pms_sku / pms_sku_stock_log /
+             pms_category / pms_brand，见 db/01-mall_product-schema.sql） -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>${mybatis-plus.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          Redis：商品域的读缓存（类目树/品牌/货架/详情）+ 库存变更后的"待同步索引"兜底集合。
+          ⚠️ 缓存是**可丢的**：CacheService 在 Redis 不可用时一律降级为直查 DB（fail-open），
+          所以本机没起 Redis 也能跑服务与全部用例。
+          与单体/其它服务共用同一个 Redis 实例（key 前缀 mall:）。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- AOP：方法调用 debug 日志切面（与单体/其它服务同一套，便于跨服务排查） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aspectj</artifactId>
+        </dependency>
+
+        <!-- RabbitMQ：**只做生产方**（P6-5 #1）。
+             背景：P6-4 之后本服务是商品的唯一写方，但库存/销量变更只能写 Redis 待同步集合，
+             靠 mall-search 的定时任务 15s 收敛（单体时代 MQ 是亚秒级）。
+             本批把"发布到既有 mall.pms.sync 拓扑"补回来（方案 §2.6 的既定形状）：MQ 主 + Redis 兜底。
+             ⚠️ 本服务**不消费**任何队列（没有 @RabbitListener），投递失败一律回落 Redis 通道。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
+        <!-- 接口文档：前台 4 条 + 后台 16 条端点的 @Tag/@Parameter/@ParameterObject 注解来自单体，
+             删注解=改契约面，所以按编译驱动把 springdoc 加进来（版本与 mall-content 等一致） -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- 注册中心：注册名 mall-product。
+             ⚠️ P6-1 **不切路由**：网关里没有任何 lb://mall-product 的路由被加进来，
+             本服务只是"能被 Nacos 发现"（验收证据之一）。切路由是 P6-4。 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+
+        <!-- P6-3 起本服务有了**出站调用**（检索交给 mall-search），因此需要 @LoadBalanced RestClient。
+             P6-1 刻意没加这个依赖：那一批零出站调用，加了只会让人以为"已经在调别人"。
+             ⚠️ @LoadBalanced 必须标在 @Bean 方法上（见 config/LoadBalancedClientConfig 的注释）。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-XX:+EnableDynamicAgentLoading -Djdk.attach.allowAttachSelf=true</argLine>
+                </configuration>
+            </plugin>
+            <!-- Lombok 注解处理器显式声明（JDK 21 起 javac 不再从 classpath 自动发现） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

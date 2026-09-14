@@ -1,0 +1,22 @@
+# P0 模块边界基线（ArchUnit 棘轮）—— 依据《微服务改造方案.md》§5 P0 / 附录 D
+#
+# 格式：<规则ID>|<origin 全限定类名> -> <target 全限定类名>
+# 说明：键只由类名构成，不含行号，因此重构（挪方法/挪行/重排 import）不会造成基线噪声。
+#       条目来自"字节码层 + 源码 import 层"的合并（任一层可见即记一条）。
+# 语义：这是"存量跨域依赖"的显式白名单。
+#       · 出现基线里没有的跨域依赖 → ModuleBoundaryTest 失败（CI 阻断新增耦合）
+#       · 基线里已有但当前不再违规的条目 → 测试同样失败（强制删行，基线只减不增）
+#       · P0 完成 = 本文件只剩这段注释，没有任何条目
+# 重新生成：mvn test -Dtest=ModuleBoundaryTest -Darchunit.baseline.write=true
+#
+# ===== P4 批次 3：基线已清空（唯一一条 B9 条目被修复）=====
+# 被删掉的那一条是：
+#   B9|com.mall.demo.pms.service.impl.CommentServiceImpl -> com.mall.demo.oms.service.OrderCommentQueryService
+# 它是"商品域 pms 依赖交易域 oms"这枚戒指的最后一条边，随评价域整体搬去 mall-review 而消失：
+#   · CommentServiceImpl（连同它的 Controller/Service/实体/Mapper/DTO）已删除；
+#   · 跨域契约 OrderCommentQueryService 与它的 /internal/v1/order/comment/** 端点已删除；
+#   · 评价的订单归属/状态/期限/防重改由 review 自己的 review_pending_item 判定。
+# 这条删除是**棘轮要求的动作**（"基线里已有但当前不再违规的条目 → 测试失败，强制删行"），
+# 删除后闸门的输出是「违规合计：0 条」，即"环已断"的可执行证据。
+# 基线现在只减不增：将来若有人把评价逻辑写回 pms、或让 pms 重新 import oms/auth，
+# B9 会立刻报"新增违规"并把 CI 拦下来。

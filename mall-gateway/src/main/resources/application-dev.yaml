@@ -1,0 +1,26 @@
+# 开发环境配置
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848    # 服务端 API 端口（控制台是 8081，别混）
+        namespace: public
+        register-enabled: true
+  # 限流计数用的 Redis（与单体同一个实例、同一套 key 前缀）
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 2s
+      connect-timeout: 2s
+
+logging:
+  level:
+    org.springframework.cloud.loadbalancer: debug
+
+# P3：网关验签需要的共享密钥（两把都必须与其它服务一致，见 application.yaml 的说明）
+mall:
+  jwt:
+    secret: mall-dev-only-secret-0123456789abcdef-change-me
+  gateway:
+    auth-token: mall-dev-only-gateway-token-change-me

@@ -1,0 +1,64 @@
+# =====================================================================
+# 生产环境：敏感项全部用环境变量占位（缺失即启动/调用失败，强制注入）
+# 启动示例：
+#   SPRING_PROFILES_ACTIVE=prod \
+#   DB_URL=jdbc:mysql://<host>:3306/mall_content?... DB_USERNAME=xxx DB_PASSWORD=xxx \
+#   REDIS_HOST=redis MINIO_ENDPOINT=... MINIO_ACCESS_KEY=... MINIO_SECRET_KEY=... \
+#   MALL_INTERNAL_TOKEN=<与其它服务同一把钥匙> NACOS_SERVER_ADDR=nacos:8848 \
+#   java -jar mall-content.jar
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1s
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+# 接口文档在生产关闭（会把接口与示例暴露成公开页面）
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+logging:
+  level:
+    root: info
+    com.mall.content: info
+    org.apache.ibatis: info
+
+mall:
+  cache:
+    enabled: ${MALL_CACHE_ENABLED:true}
+  minio:
+    endpoint: ${MINIO_ENDPOINT}
+    access-key: ${MINIO_ACCESS_KEY}
+    secret-key: ${MINIO_SECRET_KEY}
+    bucket: ${MINIO_BUCKET:mall}
+  # 内部接口共享密钥：未注入时为空 → 拦截器 fail-closed（拒绝所有内部调用），
+  # 同时出站调用也会因为没带密钥而被下游拒绝——宁可调用失败，也不能默认放行。
+  internal:
+    token: ${MALL_INTERNAL_TOKEN:}
+  product:
+    # 商品域地址：P6 之后改成 lb://mall-product（本服务无需改代码）
+    base-url: ${MALL_PRODUCT_BASE_URL:lb://mall-product}

@@ -1,0 +1,58 @@
+# =====================================================================
+# 本地开发环境：只写"与公共不同的内容"（数据源/Redis/密钥）
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848    # 服务端 API 端口（控制台是 8081，别混）
+        namespace: public
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 1s
+  # RabbitMQ(本地)：order.finished 投影消费者（P4-2）用它（与 trade/单体同一个 broker 与 vhost）。
+  # 开关在 application.yaml 的 mall.mq.enabled（默认 false）；本机开发要接通读模型时：
+  #   MALL_MQ_ENABLED=true mvn spring-boot:run   （或 --mall.mq.enabled=true）
+  # 刻意**不**在这里写 `mall.mq.enabled: true`：profile 专属配置优先级高于 test 的
+  # application.properties，写在这里等于让每个测试上下文都去连 broker（本机没起就全红）。
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    connection-timeout: 3s
+  # 本服务自己的库：mall_review（表结构见 db/01-mall_review-schema.sql）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/mall_review?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    # P8-4：最小权限账号（只对 mall_review.* 有权限；跨库读会 ERROR 1142）
+    username: mall_review
+    password: dev-only-2026
+
+logging:
+  level:
+    com.mall.review: debug
+    org.apache.ibatis: debug
+    org.springframework.web.servlet.DispatcherServlet: debug
+
+mall:
+  # 内部接口共享密钥：既要校验**别人调我**（/internal/**），也要在**我调别人**时带上。
+  # 与单体、user-center、content 保持一致（同一把钥匙）；
+  # 生产走 MALL_INTERNAL_TOKEN 环境变量。
+  internal:
+    token: mall-dev-only-internal-token-change-me
+  # P4：网关身份凭据。请求带这个头（值相同）时，本服务**信任**网关注入的 X-Member-Id（§4.4 ①），
+  # 不再自己验签/查库。必须与网关的 mall.gateway.auth-token 逐字一致（本机开发值取自网关 dev 配置）。
+  # 未配置时 fail-closed → 所有需要登录的接口都返回 401（本服务没有"自己验签"这条退路）。
+  gateway:
+    auth-token: mall-dev-only-gateway-token-change-me

@@ -1,0 +1,153 @@
+# =====================================================================
+# 公共配置：所有环境一致的内容只放这里一份(见《后端已完成功能说明.md》§5)
+# 环境相关/涉密内容放 application-dev.yaml / application-prod.yaml
+# =====================================================================
+spring:
+  application:
+    name: mall-server        # 应用名(日志/注册用)
+  profiles:
+    active: dev              # 默认启用 dev；生产用 SPRING_PROFILES_ACTIVE=prod 覆盖
+  # =====================================================================
+  # P8-4：数据库结构版本管理（Flyway）
+  #   · 权威脚本：`src/main/resources/db/migration/V1__baseline.sql`（mysqldump 导出的真实结构）
+  #   · `baseline-on-migrate=true` + `baseline-version=1`：**已有库**首次接入时，
+  #     只在 `flyway_schema_history` 记一条"基线=1"，**V1 不会被执行**；
+  #     全新空库则会真的执行 V1 把结构建出来（同一份脚本两种用法都对）。
+  #   · **不单独配 flyway 的 url/user/password**：让它复用应用自己的数据源
+  #     —— 一份凭据、一个地方，避免"应用连 A 库、Flyway 连 B 库"这种最阴的漂移。
+  #     （dev 是 mall_trade 最小权限账号；它对该库有 CREATE/ALTER，够 Flyway 用。）
+  #   · 开关：`MALL_FLYWAY_ENABLED=false` 可临时关掉（排障用；正常不要关，否则结构无人记账）。
+  # =====================================================================
+  flyway:
+    enabled: ${MALL_FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 1
+    baseline-description: "P8-4 baseline：mall_trade 切换后的现有结构"
+    validate-on-migrate: true
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  servlet:
+    multipart:               # Tomcat 上传限制(与 mall.upload.image-max-mb 配套)
+      max-file-size: 10MB
+      max-request-size: 15MB
+  # =====================================================================
+  # P1：过渡期作为"单体服务"注册进 Nacos，注册名 mall-trade
+  #   · 应用名仍叫 mall-server（日志身份不变），注册名单独指定；
+  #   · 网关按 lb://mall-trade 路由，前端只认网关 8000；
+  #   · 连接地址在 application-dev/prod.yaml（环境相关）；
+  #   · 测试环境在 src/test/resources/application.properties 里整体关闭注册。
+  # 每抽出一个服务，就从网关路由表里把对应路径从 mall-trade 切到新服务。
+  # =====================================================================
+  cloud:
+    nacos:
+      discovery:
+        service: mall-trade
+        register-enabled: true
+
+server:
+  port: 8080
+
+# =====================================================================
+# 业务参数(原 sys_config 表裁剪后移入配置；@ConfigurationProperties(prefix="mall"))
+# =====================================================================
+mall:
+  order:
+    pay-timeout-minutes: 30   # 订单支付超时(分钟)，超时自动取消并释放库存
+    # 超时关单"兜底扫描"周期(毫秒)：启用 RabbitMQ 后关单主要靠延迟消息，扫描只是保险
+    #   MQ 开启(默认)：300000(5 分钟) 够用；MQ 关闭时必须回到 60000(1 分钟) 作为唯一手段
+    timeout-scan-interval-ms: 300000
+    after-sale-days: 90       # 收货后售后期(天)，期限内可申请售后
+  # 评价参数（mall.comment.limit-days）已随评价域整体搬到 mall-review 的 application.yaml：
+  #   P4 批次 3 之后单体不再有任何读评价表/写评价的代码，留着这个键只会造成
+  #   "改了这个配置却没有任何效果"的静默误解（错误文案里的天数由 review 侧那份配置决定）。
+  # 订单日统计的兜底重算(见 OrderStatTask)：每天 00:05 重算"昨天 + 今天"。
+  # 平时统计由领域事件触发，这个任务是盖住"某天一条事件都没有 → 那天没有统计行"的缺口；
+  # cron 设为 - 即关闭(Scheduled.CRON_DISABLED)
+  stat:
+    refresh-cron: "0 5 0 * * ?"
+  freight:
+    free-threshold: 9900      # 满额包邮门槛(分)，P1 运费规则用
+  upload:
+    image-max-mb: 5           # 图片上传大小上限(MB)
+  # =====================================================================
+  # P2：出站调用内容域（管理端 Banner/公告写操作 + 文件上传都转发给它）
+  #   · 单体保留鉴权与对外契约，内容域是内容的唯一写入方；
+  #   · lb:// 走服务发现；应急/排障可临时改成 http://127.0.0.1:8107 直连；
+  #   · 写操作是关键路径 → 超时后返回 500「系统繁忙，请稍后重试」，不做降级。
+  # =====================================================================
+  content:
+    base-url: lb://mall-content
+    connect-timeout-ms: 200
+    read-timeout-ms: 1000
+  # =====================================================================
+  # P3-4：出站调用用户中心（会员/地址/购物车数据的**唯一**访问方式）
+  #   · 原来这 4 类数据由本进程直接查表，P0 已把它们收敛成 4 个域服务接口，
+  #     现在只把实现换成调用 /internal/v1/user/**（调用点一行不改）；
+  #   · 读超时比 content 宽：下单链路要读地址/购物车，属于关键路径；
+  #   · 购物车结算两阶段（claim/restore）见 UserCenterClient 注释与方案 §5 P3。
+  # =====================================================================
+  user-center:
+    # P3-4 收口后会员/地址/购物车的本地实现已随代码删除（对应的 ums_member 等表已搬进 mall-user-center）。
+    # 默认 true：本地实现已随 P3-4 删除，false 会导致"没有该契约的 Bean"启动失败。
+    # 测试通过 @TestPropertySource 覆盖为 false（走测试替身，不依赖 user-center 进程）。
+    # 注：ums_notification 的写入路径 P3-5 已随消费者搬到 mall-user-center（本单体不再写该表）。
+    # ⚠️ 已知陷阱（待修）：本地实现已随 P3-4 删除，因此**任何**取值都必须有对应 Bean：
+    #   false = 依赖测试替身 UserCenterTestDoubleConfig（仅测试作用域，生产没有）；
+    #   true  = 走 UserCenterRemoteConfig（生产正确值，但需要传 flag）。
+    # 当前保持 false 以维持测试绿（真库套件靠测试替身）；**生产启动必须传 --mall.user-center.remote=true**。
+    # 彻底修法（下一步）：把测试替身的条件从 remote=false 改成独立的测试专用属性，再把默认值定为 true。
+    remote: false
+    base-url: lb://mall-user-center
+    connect-timeout-ms: 300
+    read-timeout-ms: 2000
+  # RabbitMQ 总开关(连接信息在 profile 文件)：
+  #   true  = 下单后在事务提交时投递"超时关单"延迟消息，到期由消费者关单
+  #   false = 完全不连 RabbitMQ，只靠上面的兜底扫描(关单精度回到扫描周期)
+  mq:
+    enabled: true
+    # 商品索引同步消息的失败重试间隔(毫秒)：重试队列里按"每条消息自带 TTL"等待后回到工作队列
+    sync-retry-delay-ms: 10000
+    # 同步失败重试上限，超过后进死信队列 mall.pms.es-sync.dlq
+    sync-max-retry: 3
+    # 领域事件(支付成功/已发货/退款到账)的失败重试间隔与上限
+    event-retry-delay-ms: 10000
+    event-max-retry: 3
+    # =====================================================================
+    # P8-3 发件箱（本地消息表）：事件先落 trade_outbox、再投递
+    #   · 入库发生在业务事务里 ⇒ 进程崩在投递前也不会丢事件（改造前的缺陷）
+    #   · 提交后先走"快路径"立刻投递（时延与改造前一致），失败/崩溃的行由定时重投补发
+    #   · 投递语义 = **至少一次**（可能重复）；消费侧幂等由消费方负责
+    # =====================================================================
+    outbox:
+      enabled: true                 # false ⇒ 退回"提交后直投"老路径（应急对照用）
+      fast-path: true               # false ⇒ 只入库不投递，等定时重投（杀进程补发演练就用它）
+      relay-enabled: true           # 定时重投开关
+      relay-interval-ms: 2000       # 重投轮询间隔
+      relay-initial-delay-ms: 8000  # 启动后延迟多久开始第一轮（等 Nacos/MQ 就绪）
+      relay-batch: 50               # 单轮上限（用 idx_status_next 索引）
+      max-retry: 12                 # 重试上限，超过 ⇒ status=2 已放弃（等人工）
+      backoff-seconds: 5            # 退避基数：第 n 次失败等 n×base 秒（封顶 300 秒）
+      hang-threshold-seconds: 300   # 悬挂对账阈值：入箱超过 5 分钟仍未发出 ⇒ ERROR 告警
+      reconcile-cron: "0 10 3 * * ?"  # 每日 03:10 悬挂对账
+      # P8-4：归档（发件箱是只增表 —— 已发送行按保留期清掉；待发送/已放弃绝不碰）
+      retention-days: 7             # 已发送行的保留天数
+      archive-batch: 1000           # 单轮最多删多少行
+      archive-cron: "0 30 3 * * ?"  # 每日 03:30 归档
+
+# MinIO/JWT 密钥等按环境放在 profile 文件(dev 明文 / prod 环境变量)
+
+# =====================================================================
+# =====================================================================
+# P8-4 可观测性：日志里带 traceId
+#   只覆盖 **pattern.level**（Boot 默认 console pattern 里引用的就是它）⇒ 其余格式（时间/线程/logger/正文）一字不变，
+#   所以所有"靠 grep 日志"的判据脚本（p7-bff-switch-verify、p8-3 演练、p6-* 探针）都不受影响。
+#   `%X{traceId:-}` 的 `:-` 是"取不到就留空"，避免没走 HTTP 的日志（定时任务、MQ 消费者）打出 "null"。
+#   ⚠️ 定时任务/消费者线程**没有** traceId（它们不是 HTTP 请求）—— 这是刻意的，别把它当 bug：
+#      要关联它们需要把 id 放进消息头里，属后续项（见 .dsh-notes/P8-4-report.md §4）。
+# =====================================================================
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"

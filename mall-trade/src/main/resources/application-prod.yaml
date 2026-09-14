@@ -1,0 +1,106 @@
+# =====================================================================
+# 生产环境：全部敏感项用环境变量占位(无默认值时缺失会启动失败，强制注入)
+# 启动示例：
+#   SPRING_PROFILES_ACTIVE=prod \
+#   DB_URL=jdbc:mysql://<host>:3306/mall_trade?... \
+#   DB_USERNAME=xxx DB_PASSWORD=xxx \
+#   MALL_JWT_SECRET=... \
+#   MALL_MQ_ENABLED=true RABBITMQ_HOST=rabbitmq RABBITMQ_USERNAME=xxx RABBITMQ_PASSWORD=xxx \
+#   java -jar mall-server.jar
+# 注：MinIO 相关环境变量(MINIO_*)现在由 mall-content 使用，单体不再需要。
+# 注：ES 相关环境变量(ES_URIS/ES_USERNAME/ES_PASSWORD/ES_CA_CERT)在 P6-5 #6 之后**单体不再需要**
+#     —— 索引域（含 ES 客户端与证书）全在 mall-search，单体的 /api/admin/es/** 只做转发。
+# =====================================================================
+spring:
+  # Nacos(生产)：P8-2 起单体以 mall-trade 之名注册，地址用环境变量注入
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  # Redis(生产)：环境变量注入
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1s
+  # RabbitMQ(生产)：环境变量注入；连不上时三条链路各自降级(关单靠扫描/索引靠 Redis 队列/事件不产生)
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 3s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        concurrency: 2
+        max-concurrency: 8
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+# =====================================================================
+# 接口文档(springdoc/Swagger/RapiDoc)在生产关闭：
+#   它们会把全部接口与示例参数暴露成公开页面（本项目的示例里还带着演示口令），
+#   需要临时查看时用 SPRINGDOC_ENABLED=true 打开，看完关掉。
+# =====================================================================
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+# =====================================================================
+# 日志：生产固定 info(禁止 debug 泄漏方法参数/密码；SQL 也不打印)
+# =====================================================================
+logging:
+  level:
+    root: info
+    com.mall.demo: info
+    org.apache.ibatis: info
+    org.springframework.web.servlet.DispatcherServlet: info
+
+# =====================================================================
+# MinIO 配置已随文件上传搬到 mall-content（P2）；单体只剩 JWT / MQ / 缓存开关
+# =====================================================================
+mall:
+  cache:
+    enabled: ${MALL_CACHE_ENABLED:true}
+  jwt:
+    secret: ${MALL_JWT_SECRET}
+    expire-hours: ${MALL_JWT_EXPIRE_HOURS:24}
+  # 内部接口共享密钥：必须注入；未注入时为空 → 拦截器 fail-closed（拒绝所有内部调用），
+  # 而不是"忘了配就变成完全开放"。
+  internal:
+    token: ${MALL_INTERNAL_TOKEN:}
+  # P3/P8-2a：网关身份凭据（与网关 MALL_GATEWAY_AUTH_TOKEN 必须一致）。
+  # ⚠️ 会员侧未注入时会回落到"自行验签"；但 **P8-2a 之后管理端没有回退路径**：
+  #    管理端身份只能来自网关注入的头，未注入 ⇒ /api/admin/** 全部 401「未登录」（fail-closed）。
+  #    因此生产环境必须注入 MALL_GATEWAY_AUTH_TOKEN，且与网关的值逐字相同（轮换时两边同批发布）。
+  gateway:
+    auth-token: ${MALL_GATEWAY_AUTH_TOKEN:}
+  # MQ 默认关闭：生产未接 RabbitMQ 时不让它"连不上还一直重连刷日志"。
+  # 接好 broker 后置 MALL_MQ_ENABLED=true；关闭状态下的配套参数见下面一条（关单靠扫描，间隔 1 分钟）。
+  mq:
+    enabled: ${MALL_MQ_ENABLED:false}
+  order:
+    timeout-scan-interval-ms: ${MALL_ORDER_TIMEOUT_SCAN_MS:60000}
+
+# 提示：生产需在 MinIO 上为 mall 桶配置“公网只读”策略，图片 URL 才能被浏览器直接访问

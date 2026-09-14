@@ -1,0 +1,54 @@
+# =====================================================================
+# 本地开发环境：只写"与公共不同的内容"（数据源/Redis/密钥）
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848    # 服务端 API 端口（控制台是 8081，别混）
+        namespace: public
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 1s
+  # 本服务自己的库：mall_admin（**只有 sys_user 一张表**，见 db/01-mall_admin-schema.sql）
+  # ⚠️ 与 mall 库是两个库：单体仍然是 sys_user 的**当前权威**（直到 `/api/admin/auth/**` 路由切过来），
+  #    因此本库是**副本**。切路由前必须先重跑 db/02-migrate-sysuser-from-mall.sql 对齐（见该文件头部）。
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/mall_admin?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    # P8-4：最小权限账号（只对 mall_admin.* 有权限；跨库读会 ERROR 1142）
+    username: mall_admin
+    password: dev-only-2026
+
+logging:
+  level:
+    com.mall.admin: debug
+    org.apache.ibatis: debug
+
+mall:
+  jwt:
+    # 与单体/网关保持一致（过渡期三方共用同一个密钥；生产走 MALL_JWT_SECRET）
+    secret: mall-dev-only-secret-0123456789abcdef-change-me
+  gateway:
+    # 网关身份凭据（§4.4 ①/P7 §2）：必须与网关 mall.gateway.auth-token 逐字一致
+    # （本机开发值取自 mall-gateway 的 application-dev.yaml）。
+    # 本服务据此判断"X-Admin-Id 是网关给的，不是客户端手写的"。
+    auth-token: mall-dev-only-gateway-token-change-me
+  internal:
+    # =================================================================
+    # 服务间共享密钥（P7 后半：看板/会员要调 trade、product、user-center 的内部契约）
+    # =================================================================
+    # 与单体（demo）的 application-dev.yaml、product/user-center 的同名项**逐字一致**。
+    # ⚠️ 不一致的表现是**下游一律 403**（它们的 InternalApiAuthInterceptor 是 fail-closed），
+    #    而看板会把 403 当成"该域不可用"降级成 0 ⇒ 症状是"看板永远是 0，但没有任何报错"。
+    #    这就是为什么本项必须与数据库口令一样被当成"配置里的坑"来注释。
+    token: mall-dev-only-internal-token-change-me

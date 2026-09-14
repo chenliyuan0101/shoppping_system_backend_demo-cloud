@@ -1,0 +1,59 @@
+# =====================================================================
+# mall-content 公共配置（与环境无关的放这里；环境相关/涉密放 application-{dev,prod}.yaml）
+# 抽服务模板：端口/注册名/数据源/出站调用/监控端点 五项，后续服务照抄
+# =====================================================================
+server:
+  port: 8107              # 方案 §2.2 的服务端口规划（8101~8108）
+
+spring:
+  application:
+    name: mall-content    # 应用名 = 注册名（网关按 lb://mall-content 路由）
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  servlet:
+    multipart:            # 上传限制（与 mall.upload.image-max-mb 配套）
+      max-file-size: 10MB
+      max-request-size: 15MB
+  cloud:
+    nacos:
+      discovery:
+        service: mall-content
+        register-enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# =====================================================================
+# 业务参数
+# =====================================================================
+mall:
+  # 缓存总开关：false = 完全不使用 Redis（纯 DB 逻辑）
+  cache:
+    enabled: true
+  upload:
+    image-max-mb: 5       # 与单体同口径（对外契约不变）
+  # 出站调用：商品域首页区块（P2 唯一的跨进程调用，见 §2.9）
+  product:
+    # lb:// = 走 Nacos 服务发现；P6 商品域独立后改成 lb://mall-product。
+    # 应急/排障可临时改成 http://127.0.0.1:8080 直连（客户端会自动绕过负载均衡器）
+    base-url: lb://mall-product
+    connect-timeout-ms: 300
+    # 读超时：P2 实测"下游冷启动后首次调用 1.98s / 冷缓存 ~545ms / 稳态 18~40ms"，
+    # 因此取 2.5s 覆盖冷启动（否则每次下游重启后第一个访客都会看到降级首页）
+    read-timeout-ms: 2500
+
+logging:
+  # P8-4：日志带 traceId（只覆盖 pattern.level ⇒ 其余格式不变）
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+  level:
+    com.mall.content: info

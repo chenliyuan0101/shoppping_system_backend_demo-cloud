@@ -1,0 +1,89 @@
+# =====================================================================
+# 生产环境：敏感项全部用环境变量占位（缺失即启动失败，强制注入）
+#   SPRING_PROFILES_ACTIVE=prod \
+#   DB_URL=jdbc:mysql://<host>:3306/mall_admin?... DB_USERNAME=xxx DB_PASSWORD=xxx \
+#   REDIS_HOST=redis NACOS_SERVER_ADDR=nacos:8848 \
+#   MALL_JWT_SECRET=<与网关/单体同一把，≥32 位>  MALL_GATEWAY_AUTH_TOKEN=<与网关同一把> \
+#   java -jar mall-admin.jar
+#
+# ⚠️ MALL_JWT_SECRET 必须与网关完全一致，否则"登录成功但所有后台接口 401"（网关验签全失败）。
+#    这是"共享密钥"方案的运维硬约束：轮换密钥要网关与本服务**同时**发布。
+# ⚠️ MALL_GATEWAY_AUTH_TOKEN 必须与网关 mall.gateway.auth-token 逐字一致，
+#    否则网关注入的身份头本服务不认（回落本地验签；若 require-gateway-identity=true 则全线 401）。
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1s
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+logging:
+  level:
+    root: info
+    com.mall.admin: info
+    org.apache.ibatis: info
+
+mall:
+  cache:
+    enabled: ${MALL_CACHE_ENABLED:true}
+  jwt:
+    secret: ${MALL_JWT_SECRET}
+    expire-hours: ${MALL_JWT_EXPIRE_HOURS:24}
+  gateway:
+    auth-token: ${MALL_GATEWAY_AUTH_TOKEN:}
+  # 服务间共享密钥（P7 后半）：必须与单体/product/user-center 的 mall.internal.token 逐字一致，
+  # 否则下游内部契约一律 403 ⇒ 看板静默降级成全 0（见 application-dev.yaml 的注释）。
+  internal:
+    token: ${MALL_INTERNAL_TOKEN:}
+  # 出站目标（默认走服务发现；要指向直连地址时用环境变量覆盖）
+  trade:
+    base-url: ${MALL_TRADE_BASE_URL:lb://mall-trade}
+    connect-timeout-ms: ${MALL_TRADE_CONNECT_TIMEOUT_MS:300}
+    read-timeout-ms: ${MALL_TRADE_READ_TIMEOUT_MS:2500}
+  product:
+    base-url: ${MALL_PRODUCT_BASE_URL:lb://mall-product}
+    connect-timeout-ms: ${MALL_PRODUCT_CONNECT_TIMEOUT_MS:300}
+    read-timeout-ms: ${MALL_PRODUCT_READ_TIMEOUT_MS:2500}
+  user-center:
+    base-url: ${MALL_USER_CENTER_BASE_URL:lb://mall-user-center}
+    connect-timeout-ms: ${MALL_USER_CENTER_CONNECT_TIMEOUT_MS:300}
+    read-timeout-ms: ${MALL_USER_CENTER_READ_TIMEOUT_MS:2500}
+  admin:
+    status-reconcile-enabled: ${MALL_ADMIN_STATUS_RECONCILE_ENABLED:true}
+    status-reconcile-interval-ms: ${MALL_ADMIN_STATUS_RECONCILE_INTERVAL_MS:10000}
+    status-reconcile-initial-delay-ms: ${MALL_ADMIN_STATUS_RECONCILE_INITIAL_DELAY_MS:10000}
+    # 看板（§3）：短 TTL 缓存 + 并行度
+    dashboard:
+      cache-enabled: ${MALL_ADMIN_DASHBOARD_CACHE_ENABLED:true}
+      cache-ttl-seconds: ${MALL_ADMIN_DASHBOARD_CACHE_TTL_SECONDS:60}
+      parallelism: ${MALL_ADMIN_DASHBOARD_PARALLELISM:8}
+    auth:
+      # 目标形态：只认网关注入的身份（切 true 前必须确认网关路由已指向本服务，见 application.yaml 注释）
+      require-gateway-identity: ${MALL_ADMIN_REQUIRE_GATEWAY_IDENTITY:false}

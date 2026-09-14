@@ -1,0 +1,97 @@
+# =====================================================================
+# backend/mall-cloud 的忽略规则
+#   这是一个**多模块工程**：网关 + 8 个服务 + db/ 脚本 + build.ps1（9 个 Maven 模块）
+#   原则：**只忽略"本机构建产物与运行痕迹"，不忽略任何源码、配置、脚本与 SQL**
+#   （文末有一节"刻意不忽略"，改这个文件前请先读它 —— 那两个目录一旦被忽略，工程就不完整了）
+# =====================================================================
+
+# ---------------------------------------------------------------- 构建产物
+# 每个模块各自的 target/（含 classes、surefire-reports、打包出来的 jar、以及服务运行时的
+# console-*.log 等重定向日志）。⚠️ 注意：mall-trade/target 里那个旧的
+# demo-0.0.1-SNAPSHOT.jar 是 P8-2 更名时留下的**回滚凭据**，它属于构建产物、不入库
+# （要回滚就重新 `mvn -o package`，或从 .dsh-notes/backup 取）。
+target/
+**/target/
+# 保留 Initializr 模板里那两条"否定规则"：万一将来有人在 src 下放了个叫 target 的目录，
+# 也不该被上面两行吃掉（Spring 官方 .gitignore 就是这么写的）。
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# 打包/插件产生的中间 POM
+.flattened-pom.xml
+dependency-reduced-pom.xml
+# Maven 覆盖旧 jar 失败时的残留（Windows 上 jar 被进程锁住时会产生）
+*.jar.original
+
+# ---------------------------------------------------------------- 运行/排障日志
+# 服务启动时把 stdout/stderr 重定向到文件（本机排障、探针演练都会产生）。
+# 现存的例子：mall-product/logs/*.log、mall-search/logs/*.out|*.err —— 全是运行痕迹，不入库。
+logs/
+*.log
+*.out
+*.err
+
+# ---------------------------------------------------------------- IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.suo
+*.sw?
+
+### STS / Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ---------------------------------------------------------------- 操作系统杂项
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------- Maven Wrapper
+# wrapper 的 jar 是二进制、可再生成 ⇒ 不入库；而 mvnw / mvnw.cmd / maven-wrapper.properties
+# **要入库**（否则换台机器没法用 ./mvnw 复现构建）。本仓库目前只有 mall-trade 带 wrapper。
+.mvn/wrapper/maven-wrapper.jar
+
+# ---------------------------------------------------------------- 脚手架残留
+# Spring Initializr 生成时带的说明文件，每个模块一份，无实际内容
+HELP.md
+
+# ---------------------------------------------------------------- 本机临时文件
+*.pid
+*.tmp
+.tmp/
+# 本地覆盖用的配置（约定：真正要入库的是 application.yaml / application-dev.yaml /
+# application-prod.yaml；个人机器上的差异请放 application-local.yaml 之类，不入库）
+*.local
+
+# =====================================================================
+# 刻意**不**忽略 —— 这些是系统的一部分，忽略掉工程就不完整：
+#   ① db/**.sql
+#        · db/accounts/01-create-schema-accounts.sql  = 7 个最小权限账号（P8-4 的边界靠它）
+#        · */db/0x-*.sql                              = 建库/迁移/删除的历史脚本（留档）
+#   ② **/src/main/resources/db/migration/*.sql
+#        · mall-trade 的 V1__baseline.sql = **Flyway 结构基线的唯一来源**（结构版本管理靠它）
+#   ③ build.ps1 = 按服务跑 CI 的脚本（-List / -Service）
+#   ④ 各模块的 src/**、pom.xml、application*.yaml、mvnw / mvnw.cmd
+#   ⚠️ 所以**不要**在这个文件里加 `*.sql`、`*.yml`、`*.ps1`、`*.bat` 这类"看起来像产物"的通配规则。
+#   ⚠️ 另：mall-trade/ 里还嵌着一个 `.git`（P8-2 归位时从 backend/demo 一起搬过来的独立仓库），
+#      git 会把整个 mall-trade 当成**嵌入式仓库**、不跟踪它里面的文件。
+#      这不是 .gitignore 能解决的：要么把那个 .git 移出去（历史另存），要么按 submodule 处理。
+# =====================================================================

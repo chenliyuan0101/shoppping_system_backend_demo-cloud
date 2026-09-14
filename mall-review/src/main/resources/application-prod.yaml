@@ -1,0 +1,71 @@
+# =====================================================================
+# 生产环境：敏感项全部用环境变量占位（缺失即启动失败，强制注入）
+#   SPRING_PROFILES_ACTIVE=prod \
+#   DB_URL=jdbc:mysql://<host>:3306/mall_review?... DB_USERNAME=xxx DB_PASSWORD=xxx \
+#   REDIS_HOST=redis NACOS_SERVER_ADDR=nacos:8848 \
+#   MALL_INTERNAL_TOKEN=<与其它服务同一把> MALL_GATEWAY_AUTH_TOKEN=<与网关同一把> \
+#   java -jar mall-review.jar
+#
+# ⚠️ MALL_GATEWAY_AUTH_TOKEN 未注入时本服务**不信任任何身份头** → 需要登录的接口全部 401
+#    （fail-closed，不会静默越权）。它必须与网关逐字一致，轮换时同时发布。
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1s
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  # RabbitMQ：order.finished 投影（P4-2 已接线）。**必须与 trade 连同一个 broker / 同一个 vhost**，
+  # 否则本服务看不到 trade 发布的事件（交换机与路由键是发布方与消费方共享的契约）。
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 3s
+
+# 生产关文档（与其它服务一致：文档页面在公网是不必要的攻击面）
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+logging:
+  level:
+    root: info
+    com.mall.review: info
+    org.apache.ibatis: info
+
+mall:
+  cache:
+    enabled: ${MALL_CACHE_ENABLED:true}
+  # 事件投影总开关：false = 完全不连 RabbitMQ（待评价读模型会停止更新，
+  # 排障时用来把"MQ 抖动"与"业务问题"分开）。P4-2 已接线，生产默认 true。
+  mq:
+    enabled: ${MALL_MQ_ENABLED:true}
+  internal:
+    token: ${MALL_INTERNAL_TOKEN:}
+  gateway:
+    auth-token: ${MALL_GATEWAY_AUTH_TOKEN:}

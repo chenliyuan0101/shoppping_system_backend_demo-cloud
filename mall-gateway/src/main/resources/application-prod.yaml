@@ -1,0 +1,34 @@
+# 生产环境配置：地址一律走环境变量，不落明文
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+        register-enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+
+mall:
+  jwt:
+    # ⚠️ 必须与 mall-user-center 的 MALL_JWT_SECRET 完全一致，否则全站 401（网关验签失败）
+    secret: ${MALL_JWT_SECRET}
+    expire-hours: ${MALL_JWT_EXPIRE_HOURS:24}
+  gateway:
+    auth:
+      # 一键回退开关：置 false 则网关不再验签/注入身份，登录态回到"各服务自己验"
+      enabled: ${MALL_GATEWAY_AUTH_ENABLED:true}
+    # ⚠️ 必须与各服务的 MALL_GATEWAY_AUTH_TOKEN 一致；为空则网关不注入身份
+    auth-token: ${MALL_GATEWAY_AUTH_TOKEN:}
+    rate-limit:
+      # 生产阈值按容量压测结果调整；trust-forwarded-for 仅在"前置代理覆盖转发头"时打开
+      limit: ${GW_RATE_LIMIT:300}
+      window-seconds: ${GW_RATE_WINDOW_SECONDS:60}
+      trust-forwarded-for: ${GW_TRUST_FORWARDED_FOR:false}

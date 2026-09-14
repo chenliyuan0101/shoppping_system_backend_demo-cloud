@@ -1,0 +1,93 @@
+# =====================================================================
+# mall-search 公共配置（与环境无关的放这里；环境相关/涉密放 application-{dev,prod}.yaml）
+# 抽服务模板：端口/注册名/监控端点，与 user-center、content、review、marketing 同一套
+# =====================================================================
+server:
+  port: 8103              # 方案 §2.2 的服务端口规划（8101~8108）
+
+spring:
+  application:
+    name: mall-search     # 应用名 = 注册名（P6-4 起网关按 lb://mall-search 路由；本批不切路由）
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  cloud:
+    nacos:
+      discovery:
+        service: mall-search
+        register-enabled: true
+  # ⚠️ 本服务**没有 spring.datasource**：没有自己的 MySQL 表（规格 §1）。
+  #    索引文档的内容一律向 mall-product 拉（/internal/v1/product/index-docs）。
+  #
+  # RabbitMQ 监听口径 = **手动 ack**（成功 ack / 失败转重试队列或死信）。
+  # 这是消费者代码的契约、不是环境差异，所以放公共段；连接信息在 application-dev.yaml。
+  # 与单体逐字一致（单体 application-dev.yaml 的 listener.simple 也是这四个值）。
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        concurrency: 1
+        max-concurrency: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# =====================================================================
+# 业务参数
+# =====================================================================
+mall:
+  # 缓存/Redis 开关：false = 完全不使用 Redis（此时"待同步索引"兜底通道失效，
+  # `pendingCount()` 返回 -1、`markDirty` 只告警——与单体的 fail-open 口径一致）
+  cache:
+    enabled: true
+  # =====================================================================
+  # 商品检索（本服务就是它的属主；参数名与单体的 mall.search.* 逐字一致）
+  #   · title-analyzer：auto = 按 smartcn → cjk → standard 顺序探测可用者。
+  #     实测本机：smartcn 已装（analysis-smartcn 9.5.3），索引 mapping 里 title 的
+  #     analyzer 就是 smartcn ⇒ 自检值与环境一致（见 P6-2 汇报的核实过程）。
+  #   · sync-interval-ms：待同步队列的兜底消费间隔（毫秒），与单体同默认值 15000。
+  # =====================================================================
+  search:
+    title-analyzer: auto
+    sync-interval-ms: 15000
+  # =====================================================================
+  # 出站调 mall-product（索引文档内容的**唯一**来源）
+  #   · 只用于取"索引文档所需的字段"（spuIds / brandId / 全量分页三种取法），
+  #     绝不直接读库——本服务没有库。这是规格 §3 的核心决定："内容改为 search 向 product 拉"。
+  #   · 超时按 P2 的实测口径（连接 300ms / 读 2500ms）：下游冷启动首调约 1.98s，
+  #     照抄"目标值 300ms"会把正常请求判成故障。
+  #   · ⚠️ 刻意**不做**本地兜底：拉不到内容就**明确失败**（reindex 报错、单条同步返回 false），
+  #     绝不用"空文档"顶替——那会把商品从索引里抹掉，且不报错（规格 §6 最后一行）。
+  # =====================================================================
+  product:
+    base-url: ${MALL_PRODUCT_BASE_URL:lb://mall-product}
+    connect-timeout-ms: 300
+    read-timeout-ms: 2500
+  # =====================================================================
+  # MQ（商品索引同步通道）
+  #   · enabled **默认 true**：本服务的存在意义之一就是消费 mall.pms.es-sync
+  #     （与单体一致：单体的 RabbitMqConfig/Consumer 都是 matchIfMissing=true）；
+  #     false ⇒ 拓扑与消费者都不装配 ⇒ 本服务完全不连 broker（无 broker 的机器也能跑用例）。
+  #   · sync-retry-delay-ms / sync-max-retry：与单体同名同默认值（重试队列用**消息级 TTL**，
+  #     队列本身不设 x-message-ttl——参数一旦声明就不能改，会把重试间隔锁死在队列定义上）。
+  # =====================================================================
+  mq:
+    enabled: ${MALL_MQ_ENABLED:true}
+    sync-retry-delay-ms: 10000
+    sync-max-retry: 3
+
+logging:
+  # P8-4：日志带 traceId（只覆盖 pattern.level ⇒ 其余格式不变）
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+  level:
+    com.mall.search: info

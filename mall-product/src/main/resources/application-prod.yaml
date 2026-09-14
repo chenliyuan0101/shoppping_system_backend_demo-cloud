@@ -1,0 +1,68 @@
+# =====================================================================
+# 生产环境：敏感项全部用环境变量占位（缺失即启动失败，强制注入）
+#   SPRING_PROFILES_ACTIVE=prod \
+#   DB_URL=jdbc:mysql://<host>:3306/mall_product?... DB_USERNAME=xxx DB_PASSWORD=xxx \
+#   NACOS_SERVER_ADDR=nacos:8848 \
+#   MALL_INTERNAL_TOKEN=<与其它服务同一把> MALL_GATEWAY_AUTH_TOKEN=<与网关同一把> \
+#   java -jar mall-product.jar
+#
+# ⚠️ MALL_INTERNAL_TOKEN 未注入时：/internal/** 全部 403（fail-closed）——
+#    本服务**全部对外能力都在 /internal/**（P6-1 不切流量），所以漏配的表现是
+#    "trade 一下单就报内部接口鉴权失败"，而不是"悄悄对外开放了扣库存能力"。
+# ⚠️ MALL_GATEWAY_AUTH_TOKEN 未注入时本服务不信任任何身份头（本批还没有端点用到它）。
+#   REDIS_HOST/PORT 是读缓存与待同步集合的落点：**连不上时 fail-open**（直查 DB、只告警），
+#   因此 Redis 抖动不会让商品接口不可用，但会暂时失去缓存与"待同步标记"（要有这个监控预期）。
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1s
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+logging:
+  level:
+    root: info
+    com.mall.product: info
+    org.apache.ibatis: info
+
+mall:
+  cache:
+    enabled: ${MALL_CACHE_ENABLED:true}
+  image:
+    placeholder-url: ${MALL_IMAGE_PLACEHOLDER_URL:}
+  internal:
+    token: ${MALL_INTERNAL_TOKEN:}
+  gateway:
+    auth-token: ${MALL_GATEWAY_AUTH_TOKEN:}
+  # 管理端 JWT 验签密钥（只验签、不签发）：必须与单体/网关同一把；
+  # 未配置或短于 32 位 ⇒ **启动直接失败**（fail-fast，好过"上线后后台一律 401"）。
+  jwt:
+    secret: ${MALL_JWT_SECRET:}
+    # 与单体同口径；本服务只验签不签发 ⇒ 仅用于配置对齐与启动日志对照。
+    expire-hours: ${MALL_JWT_EXPIRE_HOURS:24}
+  # 检索域（P6-3）：默认走服务发现；超时照 P2 实测口径（连接 300ms / 读 2500ms）。
+  search:
+    base-url: ${MALL_SEARCH_BASE_URL:lb://mall-search}
+    connect-timeout-ms: ${MALL_SEARCH_CONNECT_TIMEOUT_MS:300}
+    read-timeout-ms: ${MALL_SEARCH_READ_TIMEOUT_MS:2500}

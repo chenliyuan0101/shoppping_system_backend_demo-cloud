@@ -1,0 +1,166 @@
+# =====================================================================
+# 网关公共配置（与环境无关的内容放这里；环境相关放 application-{dev,prod}.yaml）
+# =====================================================================
+server:
+  port: 8000          # 统一入口：前端两个工程都指向它（8000 避开单体的 8080）
+
+spring:
+  application:
+    name: mall-gateway
+  profiles:
+    active: dev       # 生产用 SPRING_PROFILES_ACTIVE=prod 覆盖
+  cloud:
+    gateway:
+      # ⚠️ 前缀必须是 spring.cloud.gateway.server.webflux（2025.1 线）；
+      #    写成老的 spring.cloud.gateway.routes 不会报错，但路由表为空、请求全 404。
+      server:
+        webflux:
+          routes:
+            # P2：内容域的公开读路径 → mall-content（服务名与端口见方案 §2.2）
+            # 出问题就把这一条删掉 → 流量自动落回单体……但注意：P2 之后 cms_* 表已经搬进
+            # mall_content schema，单体不再有这套读接口，所以本条的"回退"= 回退代码提交（git revert）。
+            - id: mall-content
+              uri: lb://mall-content
+              predicates:
+                - Path=/api/home/**,/api/banner/list,/api/notice/list
+            # P3：会员相关公开路径 → mall-user-center
+            # 必须与"单体改调 user-center 内部接口"（mall.user-center.remote=true）**同时生效**：
+            # 否则写还在单体本地表、而远程契约读的是 mall_user，同一份数据两条路（P3-4 实测踩到）。
+            - id: mall-user-center
+              uri: lb://mall-user-center
+              predicates:
+                - Path=/api/auth/**,/api/cart/**,/api/address/**,/api/favorite/**,/api/footprint/**,/api/notification/**            # 兜底：其余所有路径 → 单体（服务名 mall-trade）
+            # P4：评价域 → mall-review（服务名/端口见方案 §2.2；P4 批次 3 把评价的 HTTP 面整体搬走）
+            #   · **必须插在下面的 Path=/** 兜底之前**：Spring Cloud Gateway 按声明顺序匹配，
+            #     更精确的路径写在前面才能真正优先（写在兜底之后 = 永远不生效，且现象是"路由看起来配了、流量还在单体"）；
+            #   · 谓词必须**精确到评价这一个子路径面**，两条都要有：
+            #       /api/comment/**              发表评价 / 商品评价 / 我的评价
+            #       /api/product/{spuId}/comments 商品详情页的评价列表（与上一条同一实现，
+            #                                     必须同批切换，否则同一页面会读到两份副本 —— R4）
+            #   · 刻意**不**写 /api/product/**：那会把商品详情/列表/品牌一起劫到评价服务（P4 明确要求避开）；
+            #   · 出问题就把这一条删掉，同时把单体的 CommentController 加回来（回退=改路由）。
+            - id: mall-review
+              uri: lb://mall-review
+              predicates:
+                - Path=/api/comment,/api/comment/**,/api/product/*/comments
+            # P5 批次 2：营销域**会员侧**端点 → mall-marketing（券中心 / 领券 / 我的券）
+            #   · **必须插在下面的 Path=/** 兜底之前**：按声明顺序匹配，写在兜底之后 = 永不生效，
+            #     而现象是"路由看起来配了、流量还在单体"（P4 的同一条教训）；
+            #   · 谓词只覆盖会员侧那两个前缀形态：
+            #       /api/coupon                 → GET /api/coupon/available
+            #       /api/coupon/**              → GET /api/coupon/mine、POST /api/coupon/{templateId}/receive
+            #     ⚠️ 刻意**不**写 /api/admin/coupon/**：后台券管理仍在单体（管理端鉴权是 P7 的事，
+            #     批次 3 才改成"单体薄转发"）——把管理端一起劫到营销域会让它在没有 AdminAuthInterceptor
+            #     的情况下对外裸奔；
+            #   · 单体的 CouponController 与会员侧 service/DTO 已**同批删除**，
+            #     所以这条路由的"回退"不是删掉这一条，而是回退代码提交（与 mall-content/mall-review 同）。
+            - id: mall-marketing
+              uri: lb://mall-marketing
+              predicates:
+                - Path=/api/coupon,/api/coupon/**
+            # 后续抽服务时，在这里按路径**插到前面**（更精确的 Path 优先），
+            # 出问题就把该条删掉 → 流量自动落回单体，即"一键回退"。
+            # P6-4：前台商品读路径 → mall-product（服务名/端口见方案 §2.2）
+            #   · **必须插在下面的 Path=/** 兜底之前**：Spring Cloud Gateway 按声明顺序匹配，
+            #     写在兜底之后 = 永不生效，而现象是"路由看起来配了、流量还在单体"（P4 的同一条教训）；
+            #   · 谓词**精确到 4 条路径**，刻意**不**写 /api/product/**：那会把商品详情页的评价列表
+            #     （/api/product/*/comments，归 mall-review）一起劫走（P4 明确要求避开）；
+            #     {spuId} 是"恰好一段"的路径变量，能匹配 /api/product/1001 而**不**匹配 /api/product/1001/comments；
+            #   · 后台 /api/admin/product|category|brand/** 与 /api/admin/es/** **不进这条**：
+            #     前者 P6-4 起由单体薄转发（鉴权依赖 sys_user，属 P7），后者是 ES 运维面（属 search）。
+            - id: mall-product
+              uri: lb://mall-product
+              predicates:
+                - Path=/api/category/tree,/api/product/brands,/api/product/page,/api/product/{spuId}
+            # P7（P6-6 收口的前置）：管理端商品/类目/品牌 → mall-product（**直路由**，替代单体薄转发）
+            #   · 为什么可以在验证通过后删掉单体的薄转发：这三条前缀**独占**商品域，
+            #     且 product 侧的路径/请求体/响应体与单体逐字相同（P6-4 D1 实测）；
+            #   · ⚠️ 前提是**网关已统一 admin 身份**（P7 §2/§2.5）：否则会绕过单体那份
+            #     "管理员是否存在/被禁用/令牌版本"检查 ⇒ 等于削弱鉴权；
+            #   · 刻意**不含** /api/admin/es/**（ES 运维面归 search）与 /api/admin/{coupon,member,stat,mq,dashboard}（各有归属）；
+            #   · **必须在本文件后面的 Path=/** 兜底（mall-legacy）之前**：Spring Cloud Gateway 按声明顺序匹配。
+            - id: mall-product-admin
+              uri: lb://mall-product
+              predicates:
+                - Path=/api/admin/product/**,/api/admin/category/**,/api/admin/brand/**
+            # P7：管理端登录态 → mall-admin（本服务拥有 sys_user 与 admin 令牌签发）
+            #   · 只覆盖 /api/admin/auth/**（login/me/logout），与商品域那条 mall-product-admin 路径不相交；
+            #   · **必须早于 mall-legacy 兜底**（Spring Cloud Gateway 按声明顺序匹配）；
+            #   · /api/admin/auth/login 是网关 admin 过滤器的放行路径 ⇒ 登录请求不会被身份校验挡住。
+            - id: mall-admin-auth
+              uri: lb://mall-admin
+              predicates:
+                - Path=/api/admin/auth/**
+            # P7：管理端看板 + 会员
+            #   · 看板 3 条（summary/trend/top，并行聚合 + 缓存 + **任一依赖不可用仍 200 且键路径不变**）
+            #   · 会员 3 条（page/{id}/{id}/status，分页主查 + 一次批量补数、无 N+1）
+            #   · 只覆盖这两条前缀；stat/mq/es/coupon 仍归各自归属方（trade/search/marketing）
+            #   · **必须早于 mall-legacy 兜底**
+            - id: mall-admin-bff
+              uri: lb://mall-admin
+              predicates:
+                - Path=/api/admin/dashboard/**,/api/admin/member/**
+            - id: mall-legacy   # P8-2 只改 uri、**故意不改路由 id**：5 个路由补丁脚本(p6-4/p7-*)与 2 个顺序探针都以它作锚点，改名会让它们全部 FATAL
+              uri: lb://mall-trade
+              predicates:
+                - Path=/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      access: unrestricted      # 允许查看 /actuator/gateway/routes（仅内网可达）
+
+# =====================================================================
+# 网关全局限流（粗粒度、按调用方；单体里按接口维度的限流继续保留 → 两级）
+#   · 超限返回 HTTP 200 + code=429（对外契约"HTTP 恒 200"不能破）
+#   · Redis 不可用时 fail-open
+#   · 默认不信任 X-Forwarded-For（防伪造绕过）
+# 想压测/验证限流时，用命令行临时压低：--mall.gateway.rate-limit.limit=5
+#
+# P3：会员登录态在网关完成（方案 §4.4 ①）
+#   · mall.jwt.secret 必须与签发方（mall-user-center/单体）完全一致，否则全站 401；
+#   · mall.gateway.auth-token 是"网关 ↔ 各服务"的身份凭据：网关注入、下游校验。
+#     未配置时网关**不注入任何身份**（下游回落自行验签），而不是注入一个下游无法验证的头；
+#   · auth.enabled=false 是一键回退开关：登录态立刻回到"各服务自己验"的老路。
+# =====================================================================
+# P7：管理端登录态也在网关完成（规格 §2/§2.5），与会员侧同构：
+#   · 复用同一把 mall.jwt.secret 与同一把凭据 mall.gateway.auth-token；
+#   · 令牌版本键 mall:token:ver:admin:{id}、状态缓存键 mall:cache:admin:status:{id}（只读缓存，网关不查库）；
+#   · admin-auth.enabled 是**独立**的一键回退开关：会员侧 auth.enabled=false 不会顺带把管理端验签关掉
+#     （管理端的回退必须是显式的；关掉后管理端回到单体 AdminAuthInterceptor 负责）。
+mall:
+  jwt:
+    # 密钥值在 application-{dev,prod}.yaml（dev 明文 / 生产 MALL_JWT_SECRET）
+    expire-hours: 24
+  gateway:
+    auth:
+      enabled: true
+    admin-auth:
+      enabled: true
+    auth-token: ""            # ← 值在 profile 文件（生产 MALL_GATEWAY_AUTH_TOKEN）
+    rate-limit:
+      enabled: true
+      limit: 300
+      window-seconds: 60
+      trust-forwarded-for: false
+
+# =====================================================================
+# P8-4 可观测性：日志里带 traceId
+#   ⚠️ 注意：`logging` **只能有一个顶层块** —— 第一版我在文件头部另起了一个 `logging:`，
+#      SnakeYAML 直接以"重复键"拒绝启动（`processDuplicateKeys` ⇒ Application run failed）。
+#      所以这一段必须**并进**这个已有的块里。
+#   `%X{traceId:-}` 的 `:-` = 取不到就留空（网关大量组件线程不经过 TraceIdFilter，别打出 null）。
+# =====================================================================
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+  level:
+    org.springframework.cloud.gateway: info
+    com.alibaba.nacos: info
+    com.mall.gateway: info

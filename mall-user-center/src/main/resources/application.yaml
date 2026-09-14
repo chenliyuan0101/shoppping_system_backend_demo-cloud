@@ -1,0 +1,75 @@
+# =====================================================================
+# mall-user-center 公共配置（环境无关的放这里；环境相关/涉密放 application-{dev,prod}.yaml）
+# =====================================================================
+server:
+  port: 8101              # 方案 §2.2 端口规划
+
+spring:
+  application:
+    name: mall-user-center    # 应用名 = 注册名（网关按 lb://mall-user-center 路由）
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  cloud:
+    nacos:
+      discovery:
+        service: mall-user-center
+        register-enabled: true
+  # RabbitMQ 监听口径：**手动 ack**（成功 ack / 失败重投或进死信）——这是消费者代码的契约，
+  # 不是环境差异，所以放在公共配置里而不是 profile 文件（单体那边放在 dev 里是历史原因）。
+  # 连接信息（host/port/账号）在 application-{dev,prod}.yaml。
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 10
+        concurrency: 1
+        max-concurrency: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+mall:
+  cache:
+    enabled: true
+  # =====================================================================
+  # P3-5：领域事件（订单支付成功 / 已发货 / 退款到账）→ 站内消息
+  #   · 与单体同名同义：false = **完全不连 RabbitMQ**（消费者与拓扑都不装配），
+  #     本地/CI 没有 broker 也能跑全部用例（MQ 链路由 NotificationEventMqMySqlTest 单独开）；
+  #   · 事件来自单体的 mall.oms.event（topic 交换机），本服务声明自己的队列 mall.user.notification，
+  #     是"扇出"不是"抢消息"——同名队列会让通知与统计随机各丢一半（见 support/MqTopology）；
+  #   · 重试参数与单体一致：失败消息先投自己的重试队列等 TTL，超限进自己的死信队列。
+  # =====================================================================
+  mq:
+    enabled: true
+    event-retry-delay-ms: 10000
+    event-max-retry: 3
+  # JWT：**与网关共用同一把密钥**（网关验签、本服务签发）。
+  # 这正是 §4.4 的取舍：登录态不再靠"每个服务查库"，而靠"网关验签 + 共享密钥"。
+  # 密钥值在 application-dev.yaml（明文）/ 生产用 MALL_JWT_SECRET 环境变量。
+  jwt:
+    expire-hours: 24
+  # 出站调用：商品域快照（购物车/收藏/足迹展示所需，P3-3 起不再有同进程 ProductQueryService）
+  product:
+    # lb:// = 走 Nacos 服务发现；P6 商品域独立后改成 lb://mall-product。
+    # 应急/排障可临时改成 http://127.0.0.1:8080 直连（客户端会自动绕过负载均衡器）
+    base-url: lb://mall-product
+    connect-timeout-ms: 300
+    # 读超时：这是用户可感知路径（加购/购物车列表），取 2s——比 mall-content 首页的 2.5s 更紧，
+    # 因为下单前的加购不该让用户对着转圈等；下游进程不在时是连接失败（300ms 内快速失败），不会等满读超时。
+    read-timeout-ms: 2000
+
+logging:
+  # P8-4：日志带 traceId（只覆盖 pattern.level ⇒ 其余格式不变）
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+  level:
+    com.mall.usercenter: info

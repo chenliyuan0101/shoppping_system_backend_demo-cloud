@@ -1,0 +1,56 @@
+-- =====================================================================
+-- 收尾：删除单体库里的 pms_spu / pms_spu_detail / pms_sku / pms_sku_stock_log /
+--       pms_category / pms_brand（P6 的最后一步，**不可逆**）
+--
+-- ⚠️ 本文件里的 DROP **整段注释掉**：删表是不可逆动作，执行时机属于人的判断，
+--    不该由脚本"顺手"完成（P2 拆 cms_* / P3 拆 ums_* / P4 拆 pms_comment / P5 拆 sms_*
+--    都是同一个规矩：脚本只负责写好、不负责扣扳机）。
+--    要执行时手工去掉注释再跑一次，并在下面【执行记录】里写上时间与执行人。
+--
+-- 前置条件（缺一不可，逐条都要有可验证的证据；这些在 P6-6 之前都不可能满足）：
+--   1) **代码搬迁已完成**：商品的读写都在 mall-product——单体 pms 包已删
+--      （判据：grep `pms_spu|pms_sku|pms_category|pms_brand` 在 backend/demo 下只剩历史注释），
+--      且 `app/MybatisPlusConfig` 里的 `@MapperScan("com.mall.demo.pms.mapper")` 一起删掉
+--      （漏删的表现是启动即报 "找不到 mapper" 或扫到空包）；
+--   2) **两条写通路都切完**（这是 P6-4 的原子批次，不能只切一半，否则会超卖）：
+--      ① trade 的 `ProductQueryService`/`StockCommandService` 已改为调
+--         `common/client/ProductClient` → `lb://mall-product` 的 `/internal/v1/**`，
+--         且**本地 impl 已删除**（不是加开关：读旧库写新库 = 库存显示与实际扣减不一致）；
+--      ② 网关已把 4 条前台读路径切到 `lb://mall-product`，后台商品端点按薄转发或直路由；
+--      ③ 若后台端点直路由到 mall-product，**必须先在网关侧补管理员鉴权**——
+--         mall-product 自己**没有** AdminAuthInterceptor（见该服务 config/WebConfig 的类注释），
+--         否则等于把"改价/上下架/删商品"暴露成匿名可调；
+--   3) **探针在切换后仍然通过**（不是"跑过一次就算"）：
+--      · `.dsh-notes/p6-stock-consistency-probe.ps1` → VERDICT OK（三视角一致：库内真值 /
+--        对外详情接口 / 流水的 before-after）；
+--      · `.dsh-notes/p6-oversell-probe.ps1` → VERDICT OK（并发抢购不超卖、流水链首尾相接）；
+--      · 两条"库存不足"文案逐字保留：`409 库存不足：{title}`（trade 预检）与
+--        `409 商品库存不足：{title}`（product 原子条件 UPDATE 影响 0 行）；
+--   4) **源库没有第二个写入方**：这两张表的写入应当已经停止——
+--      `SELECT MAX(update_time) FROM mall.pms_sku` 与
+--      `SELECT MAX(create_time) FROM mall.pms_sku_stock_log` 在一段观察期内不再增长，
+--      这是"还有没有别的写入方"的唯一证据（P5 就是这么判的）；
+--   5) **P6-2/P6-5 已完成**：ES 索引的读写与 product 解耦（`markDirty` 的形态变更已落地，
+--      且 `ProductSearchSyncTask` 的**定时全量对账**在 search 侧跑着）——
+--      否则删表后"漏发一条事件 = 该商品永远搜不到"，且没有兜底；
+--   6) mall_product 6 表与源库逐表行数一致，且**删表前最后执行过一次** db/02-migrate-data.sql
+--      （把过渡期的增量补齐）；执行 db/02 的窗口与删表是同一个时间点，删表后它不能再跑
+--      （源表已不存在，而 product 自己已成为写入方）。
+--
+-- ⚠️ 特别提醒：`mall.pms_comment`（2502 行）**不属于商品域**（它是评价域的表，P4 已搬去
+--    mall_review，这一份是 P8 之前的回滚副本）⇒ 本文件**不得**把它一起 DROP，
+--    它的删除时机属于 P8。
+--
+-- 回退方式：数据此时已在 mall_product，只能回退**代码 + 网关路由**（与 P2/P3/P4/P5 同理）；
+--    表一旦 DROP，单体库里的那一份就没了。注意回退期间**不能再执行 db/02-migrate-data.sql**：
+--    那时源表已不存在，而 product 自己已经是写入方，重跑会覆盖真实的库存/销量。
+-- =====================================================================
+
+-- 【执行记录】执行人：________  执行时间：________  （执行前确认上面 6 条前置条件全部有证据）
+
+-- DROP TABLE IF EXISTS `mall`.`pms_sku_stock_log`;
+-- DROP TABLE IF EXISTS `mall`.`pms_sku`;
+-- DROP TABLE IF EXISTS `mall`.`pms_spu_detail`;
+-- DROP TABLE IF EXISTS `mall`.`pms_spu`;
+-- DROP TABLE IF EXISTS `mall`.`pms_category`;
+-- DROP TABLE IF EXISTS `mall`.`pms_brand`;

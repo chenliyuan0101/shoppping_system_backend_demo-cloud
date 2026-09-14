@@ -1,0 +1,30 @@
+-- ⚠️ P8-5（2026-09-14）：本文件是**历史手工脚本**（`mall` 里的源表已随空库删除）。
+--    留档用途：记录当时怎么迁的；**不要再执行**（结构权威在 src/main/resources/db/migration 或各服务 db/01）。
+-- =====================================================================
+-- 收尾：删除单体库里的 pms_comment（P4 的最后一步，**不可逆**）
+--
+-- ⚠️ 本文件里的 DROP **默认是注释掉的**：删表是不可逆动作，执行时机属于人的判断，
+--    不该由脚本"顺手"完成（P2 拆 cms_* / P3 拆 ums_* 都是同一个规矩：脚本只负责写好、不负责扣扳机）。
+--    要执行时手工去掉注释再跑一次，并在此处记录执行时间与执行人。
+--
+-- 前置条件（缺一不可，逐条都要有可验证的证据）：
+--   1) P4 的代码搬迁已完成：评价的**读写**都在 mall-review，
+--      单体 pms 的 CommentController/CommentServiceImpl/。按 mapper 已删除
+--      （判据：grep `pms_comment` 在 backend/demo 下只剩历史注释）；
+--   2) 网关已把评价相关的对外路径切到 mall-review（方案 §2.4：
+--      `GET /api/product/{spuId}/comments`、`POST /api/comment` 等），
+--      且**全站回归通过**（C1：对外契约与错误文案逐字不变）；
+--   3) 该行的观察期已过：`SELECT MAX(create_time) FROM mall_review.pms_comment 一段时间内不再增长——
+--      这是"还有没有第二个写入方"的唯一证据。P4 的过渡期里**单体 pms 仍是写入方**，
+--      所以现在执行这一步会直接丢掉过渡期新产生的评价；
+--   4) mall_review.pms_comment 的行数与源库一致（db/02-migrate-data.sql 的自检查询），
+--      并且 member_nickname 快照已回填；
+--   5) review_pending_item 已由 order.finished 事件正常投影（"待评价"这个读模型
+--      **无法**从 pms_comment 恢复，它依赖 trade 重新发事件；若投影没跑起来，
+--      删表之后评价入口会一直报"没有待评价的商品"）。
+--
+-- 回退方式：数据此时已在 mall_review，只能回退**代码 + 网关路由**
+--   （与 P2 拆 cms_* 、P3 拆 ums_* 同理）；表一旦 DROP，单体的那一份就没了。
+-- =====================================================================
+
+-- DROP TABLE IF EXISTS mall_review.pms_comment;

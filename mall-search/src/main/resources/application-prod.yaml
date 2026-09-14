@@ -1,0 +1,82 @@
+# =====================================================================
+# 生产环境：敏感项全部用环境变量占位（缺失即启动失败，强制注入）
+#   SPRING_PROFILES_ACTIVE=prod \
+#   ES_URIS=https://es:9200 ES_USERNAME=elastic ES_PASSWORD=xxx ES_CA_CERT=/etc/es/http_ca.crt \
+#   REDIS_HOST=redis RABBITMQ_HOST=mq NACOS_SERVER_ADDR=nacos:8848 \
+#   MALL_INTERNAL_TOKEN=<与其它服务同一把> MALL_PRODUCT_BASE_URL=lb://mall-product \
+#   java -jar mall-search.jar
+#
+# ⚠️ MALL_INTERNAL_TOKEN 未注入时：/internal/** 全部 403（fail-closed）。
+# ⚠️ ES 凭据未注入时：启动会失败（ES 客户端建不出来）——这是刻意的：
+#    本服务的全部能力都依赖 ES，静默降级成"能启动但检索全坏"更难查。
+#   ES 不可达时的**检索降级**在调用方（mall-product 的货架回落 MySQL LIKE，P6-3），
+#   本服务只负责"如实报错"（业务码错误 + docCount=-1），不假装成功。
+# ⚠️ ES_CA_CERT 是自签证书链（SSL bundle 用）；生产应换成受信 CA，此时该变量可留空。
+# =====================================================================
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  elasticsearch:
+    uris: ${ES_URIS:https://127.0.0.1:9200}
+    username: ${ES_USERNAME:elastic}
+    password: ${ES_PASSWORD:}
+    connection-timeout: 2s
+    socket-timeout: 5s
+    restclient:
+      ssl:
+        bundle: es
+  ssl:
+    bundle:
+      pem:
+        es:
+          truststore:
+            certificate: ${ES_CA_CERT:}
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+      connect-timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1s
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 3s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+logging:
+  level:
+    root: info
+    com.mall.search: info
+
+mall:
+  cache:
+    enabled: ${MALL_CACHE_ENABLED:true}
+  search:
+    title-analyzer: ${MALL_SEARCH_TITLE_ANALYZER:auto}
+    sync-interval-ms: ${MALL_SEARCH_SYNC_INTERVAL_MS:15000}
+  internal:
+    token: ${MALL_INTERNAL_TOKEN:}
+  product:
+    base-url: ${MALL_PRODUCT_BASE_URL:lb://mall-product}
+    connect-timeout-ms: ${MALL_PRODUCT_CONNECT_TIMEOUT_MS:300}
+    read-timeout-ms: ${MALL_PRODUCT_READ_TIMEOUT_MS:2500}
+  mq:
+    enabled: ${MALL_MQ_ENABLED:true}
+    sync-retry-delay-ms: ${MALL_MQ_SYNC_RETRY_DELAY_MS:10000}
+    sync-max-retry: ${MALL_MQ_SYNC_MAX_RETRY:3}

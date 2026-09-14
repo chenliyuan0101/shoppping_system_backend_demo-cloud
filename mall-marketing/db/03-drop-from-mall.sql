@@ -1,0 +1,35 @@
+-- =====================================================================
+-- 收尾：删除单体库里的 sms_coupon / sms_coupon_member（P5 的最后一步，**不可逆**）
+--
+-- ⚠️ 本文件里的 DROP **整段注释掉**：删表是不可逆动作，执行时机属于人的判断，
+--    不该由脚本"顺手"完成（P2 拆 cms_* / P3 拆 ums_* / P4 拆 pms_comment 都是同一个规矩：
+--    脚本只负责写好、不负责扣扳机）。要执行时手工去掉注释再跑一次，
+--    并在下面【执行记录】里写上时间与执行人。
+--
+-- 前置条件（缺一不可，逐条都要有可验证的证据；前 3 条在 P5 批次 4 才可能满足）：
+--   1) 代码搬迁已完成：券的**读写**都在 mall-marketing，
+--      单体 sms 的 Controller/Service/Mapper/domain 已删除
+--      （判据：grep `sms_coupon` 在 backend/demo 下只剩历史注释），
+--      且 trade 侧的 CouponQueryService/CouponCommandService 已客户端化
+--      （下单改 discount → lock，支付 use，取消/超时 unlock）；
+--   2) 网关已把会员侧券路径（/api/coupon/**）切到 lb://mall-marketing，
+--      且全站回归通过（C1：对外契约与错误文案逐字不变，含 5 条券文案）；
+--   3) 该行的观察期已过：`SELECT MAX(receive_time)/MAX(use_time) FROM mall.sms_coupon_member`
+--      一段时间内不再增长——这是"还有没有第二个写入方"的唯一证据。
+--      P5 批次 1~3 的过渡期里**单体仍是唯一写入方**，现在执行会直接丢掉过渡期新产生的券；
+--   4) mall_marketing 两表行数与源库一致（db/02-migrate-data.sql 的自检查询），
+--      并且**切换前最后执行过一次** 02（把过渡期的增量补齐）；
+--   5) 券三态在真库上验证过：lock/use/unlock 幂等与并发抢券用例全绿，
+--      且已上线的 order.closed 兜底会自动解锁超时关单锁住的券
+--      （否则删表后"锁死的券"再也没有回滚副本可比对）。
+--
+-- 回退方式：数据此时已在 mall_marketing，只能回退**代码 + 网关路由**
+--   （与 P2/P3/P4 同理）；表一旦 DROP，单体库里的那一份就没了。
+--   注意回退期间**不能再执行 db/02-migrate-data.sql**：那时源表已不存在，
+--   而 marketing 自己已经是写入方，重灌会覆盖真实的锁定状态。
+-- =====================================================================
+
+-- 【执行记录】执行人：________  执行时间：________  （执行前确认上面 5 条前置条件全部有证据）
+
+-- DROP TABLE IF EXISTS `mall`.`sms_coupon_member`;
+-- DROP TABLE IF EXISTS `mall`.`sms_coupon`;
