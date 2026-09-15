@@ -59,9 +59,12 @@ import java.util.regex.Pattern;
  *   判据  : 值可解析且 != 1（见单体 EnableStatus.ENABLED）⇒ 禁用 ⇒ 403
  *   缺失 / 值不可解析 / Redis 不可用 ⇒ <b>fail-open 放行</b>（交给下游与令牌版本兜底）
  * </pre>
- * ⚠️ <b>今天这个键还没有写入方</b>（写入方随 {@code mall-admin} 服务落地：改状态时写/删本键，
- * <b>并且</b> bump {@code mall:token:ver:admin:{id}} 做双保险）⇒ 现在这条检查**必须是不可见的**：
- * 键不存在 → fail-open → 请求照旧到下游/单体。这也是"本过滤器必须纯增量"的一部分。
+ * <p>✅ <b>写入方已到位（v5.3 复核更新，原先这里写的是"今天这个键还没有写入方"）</b>：
+ * {@code mall-admin.AdminStatusServiceImpl} 在"禁用/启用"时写本键（禁用写 0，**不能删**——网关要靠它产出 403），
+ * <b>并且</b> bump {@code mall:token:ver:admin:{id}} 做双保险；{@code AdminStatusReconcileTask}（10s）
+ * 还会补写"库里是启用而缓存缺失/仍禁用"的偏差。本过滤器自始至终只**读**这个键。
+ * <p>⚠️ 即便如此，缺口仍然按 fail-open 处理（键不存在 / 值不可解析 / Redis 不可用 ⇒ 放行）：
+ * 键缺失时这条检查**必须是不可见的**，这也是"本过滤器必须纯增量"的一部分。
  * <p>⚠️ 判定顺序刻意与单体一致：<b>先状态、后版本</b>（单体 {@code AdminSession.resolve} 也是先 {@code status}
  * 再 {@code tokenVersionService.matches}）——否则"已禁用 + 版本已 bump"的管理员会拿到 401 而不是 403（文案漂移）。
  *

@@ -39,8 +39,9 @@ import java.nio.charset.StandardCharsets;
  *       → 401。这是"登出/改密/被禁用后旧 token 立即失效"的**唯一机制**；
  *       版本键读不到（Redis 故障）时 fail-open 放行——与单体的口径一致，
  *       不因缓存故障把全体用户踢下线。</li>
- *   <li><b>只处理会员令牌，不碰管理端令牌</b>：{@code typ=admin} 的请求原样透传，
- *       管理端登录态仍由单体 {@code AdminAuthInterceptor} 负责（P7 再统一）。
+ *   <li><b>只处理会员令牌，不碰管理端令牌</b>：{@code typ=admin} 的请求**原样透传**。
+ *       管理端登录态由本包内的 {@link AdminIdentityFilter}（{@code HIGHEST_PRECEDENCE + 6}，
+ *       即排在本过滤器之后）负责——P7 起网关已是管理端登录态的唯一验证方，不再是"单体拦截器"。
  *       这里若"看到非 user 就拒绝"，管理端会当场全挂。</li>
  * </ol>
  *
@@ -52,6 +53,7 @@ import java.nio.charset.StandardCharsets;
  * 登录态立刻回到"各服务自己验"的老路（下游的回退路径还在，见单体 {@code MemberSession}）。
  */
 @Component
+@
 public class MemberIdentityFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(MemberIdentityFilter.class);
