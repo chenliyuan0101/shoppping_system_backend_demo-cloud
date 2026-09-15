@@ -5,7 +5,7 @@ import com.mall.review.dto.MineCommentVO;
 import com.mall.review.dto.SubmitCommentRequest;
 import com.mall.review.service.CommentService;
 import com.mall.review.support.ApiResponse;
-import com.mall.review.support.MemberId;
+import com.mall.common.support.MemberId;
 import com.mall.review.support.PageQuery;
 import com.mall.review.support.PageResult;
 import io.swagger.v3.oas.annotations.Parameter;

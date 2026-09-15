@@ -5,6 +5,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import com.mall.common.support.JsonKit;
 
 /**
  * 后台商品详情(SPU + 详情 + SKU 回显)。
@@ -47,7 +48,7 @@ public class ProductDetailVO {
             SkuVO vo = new SkuVO();
             vo.setSkuId(sku.getId());
             vo.setSkuCode(sku.getSkuCode());
-            vo.setSpecValues(com.mall.product.support.JsonKit.toMapList(sku.getSpecValues()));
+            vo.setSpecValues(com.mall.common.support.JsonKit.toMapList(sku.getSpecValues()));
             vo.setImage(sku.getImage());
             vo.setPrice(sku.getPrice());
             vo.setOriginalPrice(sku.getOriginalPrice());

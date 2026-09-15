@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.time.Duration;
+import com.mall.common.support.MemberId;
 
 /**
  * mall-review 的真库测试基类（与 user-center/content 的薄基类同一套思路）。

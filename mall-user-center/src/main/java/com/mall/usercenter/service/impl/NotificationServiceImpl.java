@@ -2,8 +2,8 @@ package com.mall.usercenter.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.mall.usercenter.support.constant.YesNo;
-import com.mall.usercenter.support.PageKit;
+import com.mall.common.constant.YesNo;
+import com.mall.common.support.PageKit;
 import com.mall.usercenter.support.PageResult;
 import com.mall.usercenter.domain.Notification;
 import com.mall.usercenter.dto.NotificationVO;
@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 站内消息实现。

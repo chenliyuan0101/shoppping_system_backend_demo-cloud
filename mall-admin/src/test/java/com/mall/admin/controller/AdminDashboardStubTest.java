@@ -22,6 +22,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import com.mall.common.support.CacheService;
 
 /**
  * <b>P7 §3 的核心套件：看板的并行聚合 / 短 TTL 缓存 / 降级不变形</b>（三个下游全部用环回桩）。

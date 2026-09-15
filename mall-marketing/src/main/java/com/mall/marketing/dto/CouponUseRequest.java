@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import com.mall.common.support.MemberId;
 
 /**
  * {@code POST /internal/v1/marketing/coupon/{use,unlock}} 的请求体（两个端点**同形**）。

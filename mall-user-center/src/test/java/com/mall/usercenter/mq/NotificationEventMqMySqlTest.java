@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import com.mall.common.support.MemberId;
 
 /**
  * <b>P3-5 的核心验收</b>：本服务作为 {@code ums_notification} 唯一写入方，真 MQ 端到端跑通。

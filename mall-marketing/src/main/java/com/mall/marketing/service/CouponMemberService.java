@@ -4,6 +4,7 @@ import com.mall.marketing.dto.CouponTemplateVO;
 import com.mall.marketing.dto.MyCouponVO;
 
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员侧券服务契约（券中心 / 领券 / 我的券）——对外公开端点

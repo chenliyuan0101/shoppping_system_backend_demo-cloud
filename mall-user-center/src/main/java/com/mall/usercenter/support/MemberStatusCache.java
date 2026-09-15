@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import com.mall.common.support.CacheService;
+import com.mall.common.support.MemberId;
 
 /**
  * 成员状态缓存（§4.4 ②/③）：{@code mall:cache:member:status:{memberId}} → {@code {memberId,nickname,status}}。

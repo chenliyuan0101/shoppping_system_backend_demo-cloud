@@ -1,6 +1,6 @@
 package com.mall.product.config;
 
-import com.mall.product.support.MemberId;
+import com.mall.common.support.MemberId;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;

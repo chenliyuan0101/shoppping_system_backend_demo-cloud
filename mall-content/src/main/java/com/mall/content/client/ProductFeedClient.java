@@ -1,6 +1,6 @@
 package com.mall.content.client;
 
-import com.mall.content.config.OutboundRestClientFactory;
+import com.mall.common.client.OutboundRestClientFactory;
 import com.mall.content.support.ApiResponse;
 import com.mall.content.support.dto.HomeFeedVO;
 import lombok.extern.slf4j.Slf4j;

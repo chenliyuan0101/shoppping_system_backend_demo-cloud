@@ -1,5 +1,7 @@
 package com.mall.marketing.mq;
 
+import com.mall.common.support.MemberId;
+
 /**
  * 订单关闭事件载荷（P5 步骤 E）：<b>单体 {@code com.mall.demo.oms.mq.OrderClosedMessage} 的契约副本</b>。
  *

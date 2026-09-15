@@ -2,7 +2,7 @@ package com.mall.marketing.config;
 
 import com.mall.marketing.support.BusinessException;
 import com.mall.marketing.support.CacheKeys;
-import com.mall.marketing.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.marketing.support.RateLimit;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +18,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import com.mall.common.support.MemberId;
 
 /**
  * 限流切面：对标注 {@link RateLimit} 的接口做固定窗口计数。

@@ -3,6 +3,7 @@ package com.mall.usercenter.service;
 import com.mall.usercenter.support.PageResult;
 import com.mall.usercenter.dto.FavoriteVO;
 import com.mall.usercenter.dto.FootprintVO;
+import com.mall.common.support.MemberId;
 
 /**
  * 收藏 + 浏览足迹服务(登录态，见《接口文档.md》2.9)。

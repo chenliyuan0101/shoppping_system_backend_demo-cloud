@@ -8,6 +8,7 @@ import com.mall.admin.support.constant.EnableStatus;
 import com.mall.admin.support.dto.AdminStatusVO;
 
 import java.time.Duration;
+import com.mall.common.support.CacheService;
 
 /**
  * 管理员状态缓存（P7 §2.5）：{@code mall:cache:admin:status:{adminId}} → {@code {adminId,username,status}}。

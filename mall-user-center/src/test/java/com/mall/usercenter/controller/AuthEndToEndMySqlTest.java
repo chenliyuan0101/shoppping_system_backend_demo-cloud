@@ -23,6 +23,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员认证域的<b>真库 + 真 Redis 端到端测试</b>：五个对外路径全部走一遍 MockMvc。

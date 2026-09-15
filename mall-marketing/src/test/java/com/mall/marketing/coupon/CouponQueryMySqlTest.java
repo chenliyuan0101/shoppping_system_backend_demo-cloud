@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.mall.common.support.MemberId;
 
 /**
  * <b>券的可用性规则与抵扣计算的逐字回归</b>（{@code usable} / {@code discount}）。

@@ -75,6 +75,31 @@ while ((Get-ConcurrentBuild).Count -gt 0 -and $waited -lt $WaitForBuildSeconds) 
 }
 if ((Get-ConcurrentBuild).Count -gt 0) { Write-Output "FATAL 仍有构建在跑（等满 ${WaitForBuildSeconds}s）—— 不并发跑，退出"; exit 3 }
 
+# =====================================================================
+# 0) 准备共享内核（v5.2）：8 个服务都依赖 mall-common，而它们是**独立工程** ⇒
+#    不先 install 到本地仓库，单模块 `mvn -o test` 会以"找不到 com.mall:mall-common"失败。
+#    （不想每次 install 的话，改用聚合工程一次性构建：mvn -o -f backend/mall-cloud/pom.xml test）
+#    ⚠️ mall-common 的 pom 把 install 插件钉在 3.1.2：Boot 4.1.1 默认的 3.1.4 依赖
+#       maven-resolver-*:1.9.22，而本机离线仓库里那两个版本只有 .pom 没有 .jar。
+# =====================================================================
+$commonDir = Join-Path $cloud 'mall-common'
+if ((Test-Path (Join-Path $commonDir 'pom.xml')) -and -not $Service) {
+    Write-Output '==================== 0) 准备共享内核 mall-common ===================='
+    Push-Location $commonDir
+    $prevEap0 = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $out0 = & $mvn -o -q install -DskipTests 2>&1
+    $code0 = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap0
+    Pop-Location
+    if ($code0 -ne 0) {
+        Write-Output '  ❌ 共享内核安装失败 —— 后续单模块构建会因解析不到 mall-common 而失败'
+        $out0 | Select-Object -Last 8 | ForEach-Object { Write-Output ("    " + $_) }
+        exit 4
+    }
+    Write-Output '  ✅ 已安装到本地仓库（D:\maven\maven_repository\com\mall\mall-common）'
+}
+
 $results = @()
 foreach ($t in $targets) {
     $dir = Join-Path $cloud $t

@@ -3,13 +3,13 @@ package com.mall.product.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mall.product.support.BusinessException;
 import com.mall.product.support.RequestValidator;
-import com.mall.product.support.PageKit;
+import com.mall.common.support.PageKit;
 import com.mall.product.support.CacheKeys;
-import com.mall.product.support.CacheService;
-import com.mall.product.support.JsonKit;
+import com.mall.common.support.CacheService;
+import com.mall.common.support.JsonKit;
 import com.mall.product.support.PageResult;
 import com.mall.product.support.constant.EnableStatus;
-import com.mall.product.support.constant.YesNo;
+import com.mall.common.constant.YesNo;
 import com.mall.product.domain.Brand;
 import com.mall.product.domain.Category;
 import com.mall.product.domain.Sku;
@@ -47,7 +47,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import com.mall.product.support.BrandSupport;
 import com.mall.product.support.CategoryTreeBuilder;
-import com.mall.product.support.TxCallbacks;
+import com.mall.common.support.TxCallbacks;
 
 /**
  * 后台类目/商品管理实现。

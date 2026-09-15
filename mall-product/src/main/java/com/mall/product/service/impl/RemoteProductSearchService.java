@@ -7,7 +7,7 @@ import com.mall.product.dto.SearchStatusVO;
 import com.mall.product.service.ProductSearchService;
 import com.mall.product.support.ApiResponse;
 import com.mall.product.support.BusinessException;
-import com.mall.product.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.product.mapper.SpuMapper;
 import com.mall.product.mq.ProductSyncPublisher;
 import com.mall.product.support.dto.ReindexResult;

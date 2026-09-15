@@ -1,6 +1,6 @@
 package com.mall.search.client;
 
-import com.mall.search.config.OutboundRestClientFactory;
+import com.mall.common.client.OutboundRestClientFactory;
 import com.mall.search.dto.IndexDocsResult;
 import com.mall.search.support.ApiResponse;
 import com.mall.search.support.BusinessException;

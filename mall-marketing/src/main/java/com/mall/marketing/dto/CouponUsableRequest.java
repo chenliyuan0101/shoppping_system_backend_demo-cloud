@@ -3,6 +3,7 @@ package com.mall.marketing.dto;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
+import com.mall.common.support.MemberId;
 
 /**
  * {@code POST /internal/v1/marketing/coupon/usable} 的请求体：算"这个会员在这个金额下能用哪些券"。

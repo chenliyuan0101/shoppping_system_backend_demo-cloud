@@ -1,6 +1,6 @@
 package com.mall.product.config;
 
-import com.mall.product.support.AuthAttribute;
+import com.mall.common.support.AuthAttribute;
 import com.mall.product.support.AuthHeader;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

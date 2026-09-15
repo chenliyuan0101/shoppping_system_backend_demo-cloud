@@ -6,7 +6,7 @@ import com.mall.admin.dto.MemberAdminVO;
 import com.mall.admin.service.AdminMemberService;
 import com.mall.admin.support.BusinessException;
 import com.mall.admin.support.DashboardCache;
-import com.mall.admin.support.TxCallbacks;
+import com.mall.common.support.TxCallbacks;
 import com.mall.admin.support.dto.MemberOrderBriefVO;
 import com.mall.admin.support.dto.MemberSnapshotVO;
 import com.mall.admin.support.dto.PageResult;

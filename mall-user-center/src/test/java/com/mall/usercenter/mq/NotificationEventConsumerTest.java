@@ -32,6 +32,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import com.mall.common.support.MemberId;
 
 /**
  * <b>P4-2 的 user-center 侧验收</b>：{@code order.finished} 不再刷"未知事件类型"WARN，

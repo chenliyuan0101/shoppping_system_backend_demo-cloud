@@ -23,6 +23,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import com.mall.common.support.MemberId;
 
 /**
  * <b>P5 步骤 C 的后台端点验收</b>：券模板的建/改/启停/删/分页/发放记录搬进营销域后，

@@ -3,6 +3,7 @@ package com.mall.marketing.service;
 import com.mall.marketing.support.dto.CouponBriefVO;
 
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 券查询契约：<b>券的可用性规则与抵扣计算只在本域内实现</b>。

@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 站内消息 Mapper。

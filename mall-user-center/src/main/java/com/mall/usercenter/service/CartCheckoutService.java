@@ -5,6 +5,7 @@ import com.mall.usercenter.support.dto.CartItemSnapshotVO;
 
 import java.util.Collection;
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 购物车<b>结算契约</b>（供下单链路使用）。

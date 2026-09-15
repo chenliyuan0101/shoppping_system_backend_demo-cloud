@@ -4,6 +4,7 @@ import com.mall.review.dto.CommentsResult;
 import com.mall.review.dto.MineCommentVO;
 import com.mall.review.dto.SubmitCommentRequest;
 import com.mall.review.support.PageResult;
+import com.mall.common.support.MemberId;
 
 /**
  * 评价服务(见《接口文档.md》2.8)。

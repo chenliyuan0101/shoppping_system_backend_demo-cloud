@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 收货地址展示对象(字段与 ums_address 实体对外字段一一对应，字段名供前台 CheckoutView/Profile 直接读取)。

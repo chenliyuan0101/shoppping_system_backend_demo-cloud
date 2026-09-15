@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 商品收藏，对应 ums_favorite。

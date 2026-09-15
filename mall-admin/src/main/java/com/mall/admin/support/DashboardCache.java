@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 
 import java.time.Duration;
+import com.mall.common.support.CacheService;
 
 /**
  * 看板缓存（P7 §3）：短 TTL（分钟级）+ <b>主动失效</b>。

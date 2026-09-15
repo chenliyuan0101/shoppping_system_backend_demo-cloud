@@ -7,7 +7,7 @@ import com.mall.usercenter.dto.RegisterRequest;
 import com.mall.usercenter.dto.UserInfo;
 import com.mall.usercenter.service.MemberService;
 import com.mall.usercenter.support.ApiResponse;
-import com.mall.usercenter.support.MemberId;
+import com.mall.common.support.MemberId;
 import com.mall.usercenter.support.RateLimit;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;

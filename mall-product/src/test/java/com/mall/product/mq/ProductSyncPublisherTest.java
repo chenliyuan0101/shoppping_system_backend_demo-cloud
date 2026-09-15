@@ -1,6 +1,6 @@
 package com.mall.product.mq;
 
-import com.mall.product.support.JsonKit;
+import com.mall.common.support.JsonKit;
 import com.mall.product.support.MqTopology;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

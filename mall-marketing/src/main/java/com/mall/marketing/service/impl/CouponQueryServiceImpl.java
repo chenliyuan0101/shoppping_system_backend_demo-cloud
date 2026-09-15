@@ -8,7 +8,7 @@ import com.mall.marketing.mapper.CouponMemberMapper;
 import com.mall.marketing.service.CouponQueryService;
 import com.mall.marketing.support.BusinessException;
 import com.mall.marketing.support.CouponRules;
-import com.mall.marketing.support.MallTime;
+import com.mall.common.support.MallTime;
 import com.mall.marketing.support.constant.CouponMemberStatus;
 import com.mall.marketing.support.dto.CouponBriefVO;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import com.mall.common.support.MemberId;
 
 /**
  * 券查询契约实现：券的可用性规则与抵扣计算<b>只在本域内实现</b>。

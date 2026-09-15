@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.mall.common.support.TxCallbacks;
 
 /**
  * {@link TxCallbacks} 的单元测试 —— 重点是**嵌套调用**那条（P6-5 施工中实测到的静默失效）。

@@ -59,7 +59,7 @@ spring:
 # =====================================================================
 logging:
   level:
-    com.mall.demo: debug                      # 业务代码 + MethodLogAspect
+    com.mall.trade: debug                      # 业务代码 + MethodLogAspect
     org.apache.ibatis: debug                  # 每条 SQL(Preparing/Parameters)
     org.springframework.web.servlet.DispatcherServlet: debug   # 每个 HTTP 请求路由
 

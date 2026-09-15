@@ -13,6 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import com.mall.common.support.MemberId;
 
 /**
  * 确认收货（{@code order.finished}）事件的消费者：<b>P4-2 起"待评价读模型"的唯一写入方</b>。

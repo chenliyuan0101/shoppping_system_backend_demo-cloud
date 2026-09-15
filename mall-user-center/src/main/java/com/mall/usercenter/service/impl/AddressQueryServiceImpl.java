@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
+import com.mall.common.support.MemberId;
 
 /**
  * 地址只读契约实现："默认地址怎么选"这条规则留在地址域内，调用方只表达意图。

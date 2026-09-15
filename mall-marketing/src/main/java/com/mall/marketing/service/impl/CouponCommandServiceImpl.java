@@ -7,7 +7,7 @@ import com.mall.marketing.mapper.CouponMemberMapper;
 import com.mall.marketing.service.CouponCommandService;
 import com.mall.marketing.support.BusinessException;
 import com.mall.marketing.support.CouponRules;
-import com.mall.marketing.support.MallTime;
+import com.mall.common.support.MallTime;
 import com.mall.marketing.support.constant.CouponMemberStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 券三态命令实现：<b>三态的全部并发语义押在三条条件 UPDATE 的影响行数上</b>

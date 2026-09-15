@@ -7,6 +7,7 @@ import com.mall.usercenter.support.dto.MemberSnapshotVO;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员域的<b>查询契约</b>（供其它域使用）。

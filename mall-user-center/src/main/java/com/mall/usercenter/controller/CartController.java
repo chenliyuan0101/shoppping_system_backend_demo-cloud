@@ -1,7 +1,7 @@
 package com.mall.usercenter.controller;
 
 import com.mall.usercenter.support.ApiResponse;
-import com.mall.usercenter.support.MemberId;
+import com.mall.common.support.MemberId;
 import com.mall.usercenter.dto.CartAddRequest;
 import com.mall.usercenter.dto.CartItemVO;
 import com.mall.usercenter.dto.CartQuantityRequest;

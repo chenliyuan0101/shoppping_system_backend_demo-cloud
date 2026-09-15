@@ -1,5 +1,7 @@
 package com.mall.usercenter.support;
 
+import com.mall.common.support.MemberId;
+
 /**
  * Redis key 规范（本服务自持副本，只保留用户中心真正用到的条目）。
  *

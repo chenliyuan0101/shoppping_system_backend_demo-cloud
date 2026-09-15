@@ -4,13 +4,14 @@ import com.mall.review.domain.ReviewPendingItem;
 import com.mall.review.mapper.ReviewPendingItemMapper;
 import com.mall.review.mq.OrderFinishedMessage;
 import com.mall.review.service.ReviewPendingService;
-import com.mall.review.support.MallTime;
+import com.mall.common.support.MallTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 待评价读模型的写入实现（P4-2）。

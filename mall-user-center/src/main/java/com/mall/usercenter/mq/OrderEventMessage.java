@@ -1,5 +1,7 @@
 package com.mall.usercenter.mq;
 
+import com.mall.common.support.MemberId;
+
 /**
  * 订单/售后领域事件消息(JSON 序列化)——单体的 {@code com.mall.demo.oms.mq.OrderEventMessage} 的契约副本。
  *

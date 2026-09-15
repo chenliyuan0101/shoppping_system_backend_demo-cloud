@@ -11,7 +11,7 @@ import com.mall.marketing.mapper.CouponMemberMapper;
 import com.mall.marketing.service.AdminCouponService;
 import com.mall.marketing.support.BusinessException;
 import com.mall.marketing.support.CouponStatusProjection;
-import com.mall.marketing.support.PageKit;
+import com.mall.common.support.PageKit;
 import com.mall.marketing.support.PageResult;
 import com.mall.marketing.support.RequestValidator;
 import com.mall.marketing.support.constant.CouponStatus;

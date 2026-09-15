@@ -2,6 +2,7 @@ package com.mall.usercenter.service;
 
 import com.mall.usercenter.support.PageResult;
 import com.mall.usercenter.dto.NotificationVO;
+import com.mall.common.support.MemberId;
 
 /**
  * 站内消息（由 MQ 领域事件驱动生成，见《后端RabbitMQ使用手册.md》）。

@@ -3,7 +3,7 @@ package com.mall.usercenter.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mall.usercenter.client.ProductSnapshotClient;
 import com.mall.usercenter.support.BusinessException;
-import com.mall.usercenter.support.PageKit;
+import com.mall.common.support.PageKit;
 import com.mall.usercenter.support.PageResult;
 import com.mall.usercenter.support.constant.EnableStatus;
 import com.mall.usercenter.support.dto.SpuSnapshotVO;
@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import com.mall.common.support.MemberId;
 
 /**
  * 收藏/足迹实现：收藏支持开关(unique member+spu)；足迹按 member+spu 唯一、重复浏览刷新时间。

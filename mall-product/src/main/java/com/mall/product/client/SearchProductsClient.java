@@ -1,6 +1,6 @@
 package com.mall.product.client;
 
-import com.mall.product.config.OutboundRestClientFactory;
+import com.mall.common.client.OutboundRestClientFactory;
 import com.mall.product.dto.ProductIdPage;
 import com.mall.product.dto.ProductSearchDoc;
 import com.mall.product.dto.SearchStatusVO;

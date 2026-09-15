@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mall.usercenter.domain.Member;
 import com.mall.usercenter.mapper.MemberMapper;
 import com.mall.usercenter.service.MemberQueryService;
-import com.mall.usercenter.support.PageKit;
+import com.mall.common.support.PageKit;
 import com.mall.usercenter.support.PageResult;
 import com.mall.usercenter.support.dto.MemberBriefVO;
 import com.mall.usercenter.support.dto.MemberSnapshotVO;
@@ -16,6 +16,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员查询契约实现：只做"读会员表 + 转契约快照"，不在这里堆业务规则。

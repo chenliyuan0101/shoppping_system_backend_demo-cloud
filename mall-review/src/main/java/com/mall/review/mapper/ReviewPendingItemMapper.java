@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
+import com.mall.common.support.MemberId;
 
 /**
  * 待评价读模型的 Mapper（只扫本服务的 {@code com.mall.review.mapper} 包，见 MybatisPlusConfig）。

@@ -1,6 +1,6 @@
 package com.mall.admin.client;
 
-import com.mall.admin.config.OutboundRestClientFactory;
+import com.mall.common.client.OutboundRestClientFactory;
 import com.mall.admin.support.ApiResponse;
 import com.mall.admin.support.BusinessException;
 import com.mall.admin.support.dto.MemberSnapshotVO;

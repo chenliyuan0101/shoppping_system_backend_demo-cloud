@@ -4,7 +4,7 @@ import com.mall.admin.domain.AdminUser;
 import com.mall.admin.support.AdminSession;
 import com.mall.admin.support.AuthHeader;
 import com.mall.admin.support.BusinessException;
-import com.mall.admin.support.GatewayAuthHeaders;
+import com.mall.common.support.GatewayAuthHeaders;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

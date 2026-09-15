@@ -3,6 +3,7 @@ package com.mall.marketing.dto;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
+import com.mall.common.support.MemberId;
 
 /**
  * {@code POST /internal/v1/marketing/coupon/discount} 的请求体：算这张券能抵多少钱（分）。

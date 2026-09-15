@@ -2,7 +2,7 @@ package com.mall.product.mq;
 
 import com.mall.product.support.MqMessages;
 import com.mall.product.support.MqTopology;
-import com.mall.product.support.TxCallbacks;
+import com.mall.common.support.TxCallbacks;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;

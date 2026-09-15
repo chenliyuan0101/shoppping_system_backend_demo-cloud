@@ -6,7 +6,7 @@ import com.mall.admin.service.AdminStatusService;
 import com.mall.admin.support.AdminStatusCache;
 import com.mall.admin.support.BusinessException;
 import com.mall.admin.support.TokenVersionService;
-import com.mall.admin.support.TxCallbacks;
+import com.mall.common.support.TxCallbacks;
 import com.mall.admin.support.constant.EnableStatus;
 import com.mall.admin.support.dto.AdminStatusVO;
 import lombok.RequiredArgsConstructor;

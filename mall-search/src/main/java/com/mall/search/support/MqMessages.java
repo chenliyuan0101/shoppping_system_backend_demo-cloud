@@ -1,6 +1,6 @@
 package com.mall.search.support;
 
-import com.mall.search.support.JsonKit;
+import com.mall.common.support.JsonKit;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;

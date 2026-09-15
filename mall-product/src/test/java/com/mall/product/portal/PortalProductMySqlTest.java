@@ -1,7 +1,7 @@
 package com.mall.product.portal;
 
 import com.jayway.jsonpath.JsonPath;
-import com.mall.product.support.JsonKit;
+import com.mall.common.support.JsonKit;
 import com.mall.product.support.ProductTestBase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

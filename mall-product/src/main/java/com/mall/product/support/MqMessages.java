@@ -5,6 +5,7 @@ import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
 
 import java.nio.charset.StandardCharsets;
+import com.mall.common.support.JsonKit;
 
 /**
  * MQ 消息编解码小工具（**生产方视角**：只有"造一条 JSON 消息"这一件事）。

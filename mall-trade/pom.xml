@@ -11,8 +11,8 @@
     <groupId>com.mall</groupId>
     <artifactId>mall-trade</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>mall-server</name>
-    <description>商城系统后端</description>
+    <name>mall-trade</name>
+    <description>商城系统交易域服务（P8-2 前是单体 mall-server，更名后与模块/jar/目录/Nacos 注册名/DB schema 同值）</description>
     <properties>
         <java.version>21</java.version>
         <mybatis-plus.version>3.5.12</mybatis-plus.version>
@@ -117,7 +117,7 @@
              背景：索引域早就搬到 mall-search（P6-2/P6-4），单体只剩 `AdminEsController` 的
              自检/重建两个端点；它们现在是**纯转发**（见 common/client/SearchOpsClient）。
              留着这个依赖的唯一后果是：依赖、`spring.elasticsearch.*` 配置、证书、连接池全都还在，
-             而 P6-6 也正因此删不掉 `com.mall.demo.pms` 整包与 `@MapperScan`。
+             而 P6-6 也正因此删不掉 `com.mall.trade.pms` 整包与 `@MapperScan`。
              验收（本批 spec §三 第 5 条）：`grep -r "elasticsearch" backend/demo/src/main` = 0 命中。 -->
 
         <!-- RabbitMQ：订单超时关单的延迟消息(TTL+死信)；投递失败 fail-open，由兜底扫描任务补偿 -->
@@ -154,8 +154,8 @@
 
         <!--
             P1：服务注册（P8-2 起以 mall-trade 之名注册进 Nacos，供网关 lb:// 路由）。
-            注册名与应用名分离：spring.application.name 仍是 mall-server（日志身份），
-            注册名由 spring.cloud.nacos.discovery.service 指定。
+            规范化（2026-09-15）：应用名与注册名**已同值**（spring.application.name=mall-trade）；
+            `spring.cloud.nacos.discovery.service` 仍显式写着同值，作用是钉住注册名、避免默认推导漂移。
             测试环境在 src/test/resources/application.properties 里整体关闭注册。
         -->
         <dependency>
@@ -191,7 +191,18 @@
             <artifactId>spring-boot-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
-    </dependencies>
+            <!--
+            v5.2：共享内核（非契约基础设施）。**没有**它就没有出站装配/头拦截器/traceId 过滤器/JSON、
+            缓存、分页、时间工具与网关身份头常量。契约面（ApiResponse/BusinessException/
+            GlobalExceptionHandler/PageResult）仍由本服务自持 —— 见《微服务代码规范.md》§6。
+            构建顺序：先 `mvn -o install` mall-common（离线仓库依赖它），再构建本模块。
+        -->
+        <dependency>
+            <groupId>com.mall</groupId>
+            <artifactId>mall-common</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+</dependencies>
 
     <build>
         <plugins>

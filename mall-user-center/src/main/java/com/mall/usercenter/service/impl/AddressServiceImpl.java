@@ -2,7 +2,7 @@ package com.mall.usercenter.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mall.usercenter.support.BusinessException;
-import com.mall.usercenter.support.constant.YesNo;
+import com.mall.common.constant.YesNo;
 import com.mall.usercenter.support.RequestValidator;
 import com.mall.usercenter.domain.Address;
 import com.mall.usercenter.dto.AddressSaveRequest;
@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.regex.Pattern;
+import com.mall.common.support.MemberId;
 
 /**
  * 收货地址实现：仅能操作本人地址(水平越权防护在 requireOwned)。

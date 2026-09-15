@@ -13,6 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import com.mall.common.support.MemberId;
 
 /**
  * 站内消息的领域事件消费者：<b>P3-5 起本服务是 ums_notification 的唯一写入方</b>。

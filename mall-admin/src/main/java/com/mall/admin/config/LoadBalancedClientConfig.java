@@ -4,6 +4,7 @@ import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
+import com.mall.common.client.OutboundHeadersInterceptor;
 
 /**
  * 出站调用配置：走服务发现的 {@link RestClient.Builder}（P7 后半起需要）。

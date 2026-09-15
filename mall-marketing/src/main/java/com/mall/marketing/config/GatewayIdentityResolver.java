@@ -1,7 +1,7 @@
 package com.mall.marketing.config;
 
 import com.mall.marketing.support.BusinessException;
-import com.mall.marketing.support.GatewayAuthHeaders;
+import com.mall.common.support.GatewayAuthHeaders;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +10,7 @@ import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import com.mall.common.support.MemberId;
 
 /**
  * 身份解析：**本服务不验签，只判断"这个身份是不是网关给的"**（方案 §4.4 ①）。

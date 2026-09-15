@@ -5,6 +5,7 @@ import com.mall.review.support.dto.MemberNicknameVO;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.service.annotation.GetExchange;
 import org.springframework.web.service.annotation.HttpExchange;
+import com.mall.common.support.MemberId;
 
 /**
  * <b>会员域内部契约的声明式接口</b>（Spring HTTP Interface，替换原先手写的 {@code RestClient} 调用）。

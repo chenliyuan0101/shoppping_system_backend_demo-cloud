@@ -5,6 +5,7 @@ import com.mall.usercenter.dto.LoginRequest;
 import com.mall.usercenter.dto.PasswordRequest;
 import com.mall.usercenter.dto.RegisterRequest;
 import com.mall.usercenter.dto.UserInfo;
+import com.mall.common.support.MemberId;
 
 /**
  * 前台会员认证服务(对应《接口文档.md》2.1)。

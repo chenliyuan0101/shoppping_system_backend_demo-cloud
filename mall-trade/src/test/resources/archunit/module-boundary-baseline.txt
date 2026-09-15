@@ -11,7 +11,7 @@
 #
 # ===== P4 批次 3：基线已清空（唯一一条 B9 条目被修复）=====
 # 被删掉的那一条是：
-#   B9|com.mall.demo.pms.service.impl.CommentServiceImpl -> com.mall.demo.oms.service.OrderCommentQueryService
+#   B9|com.mall.trade.pms.service.impl.CommentServiceImpl -> com.mall.trade.oms.service.OrderCommentQueryService
 # 它是"商品域 pms 依赖交易域 oms"这枚戒指的最后一条边，随评价域整体搬去 mall-review 而消失：
 #   · CommentServiceImpl（连同它的 Controller/Service/实体/Mapper/DTO）已删除；
 #   · 跨域契约 OrderCommentQueryService 与它的 /internal/v1/order/comment/** 端点已删除；

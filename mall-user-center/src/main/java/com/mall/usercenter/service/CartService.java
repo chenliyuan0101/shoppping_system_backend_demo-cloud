@@ -3,6 +3,7 @@ package com.mall.usercenter.service;
 import com.mall.usercenter.dto.CartItemVO;
 
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 购物车服务(登录态，见《接口文档.md》2.4)。

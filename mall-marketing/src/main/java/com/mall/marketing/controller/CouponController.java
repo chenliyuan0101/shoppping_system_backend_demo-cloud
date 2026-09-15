@@ -4,7 +4,7 @@ import com.mall.marketing.dto.CouponTemplateVO;
 import com.mall.marketing.dto.MyCouponVO;
 import com.mall.marketing.service.CouponMemberService;
 import com.mall.marketing.support.ApiResponse;
-import com.mall.marketing.support.MemberId;
+import com.mall.common.support.MemberId;
 import com.mall.marketing.support.RateLimit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;

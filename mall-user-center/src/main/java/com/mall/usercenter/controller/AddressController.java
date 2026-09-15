@@ -1,7 +1,7 @@
 package com.mall.usercenter.controller;
 
 import com.mall.usercenter.support.ApiResponse;
-import com.mall.usercenter.support.MemberId;
+import com.mall.common.support.MemberId;
 import com.mall.usercenter.domain.Address;
 import com.mall.usercenter.dto.AddressSaveRequest;
 import com.mall.usercenter.dto.AddressVO;

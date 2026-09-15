@@ -1,5 +1,7 @@
 package com.mall.usercenter.support.dto;
 
+import com.mall.common.support.MemberId;
+
 /**
  * 成员状态快照（P3 §4.4 ② 的 Redis 载荷）。
  *

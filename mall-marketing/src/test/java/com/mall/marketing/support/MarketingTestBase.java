@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import com.mall.common.support.MemberId;
 
 /**
  * mall-marketing 的真库测试基类（与 user-center/content/review 的薄基类同一套思路）。

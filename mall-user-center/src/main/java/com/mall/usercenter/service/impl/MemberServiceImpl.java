@@ -22,6 +22,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.regex.Pattern;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员注册/登录实现。校验规则与《接口文档.md》2.1 一致。

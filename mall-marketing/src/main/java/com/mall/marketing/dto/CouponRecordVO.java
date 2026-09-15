@@ -3,6 +3,7 @@ package com.mall.marketing.dto;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 券模板领取记录 —— 单体 {@code com.mall.demo.sms.dto.CouponRecordVO} 的契约副本。

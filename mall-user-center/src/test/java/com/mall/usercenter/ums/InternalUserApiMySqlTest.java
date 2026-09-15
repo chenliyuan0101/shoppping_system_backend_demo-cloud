@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import com.mall.common.support.MemberId;
 
 /**
  * {@code /internal/v1/user/**} 的<b>契约测试</b>：P3-3 新增/变更的那些端点。

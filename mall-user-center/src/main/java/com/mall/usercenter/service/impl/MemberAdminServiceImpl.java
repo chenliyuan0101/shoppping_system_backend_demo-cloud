@@ -10,6 +10,7 @@ import com.mall.usercenter.support.constant.EnableStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员管理写契约实现：状态校验 + 落库 + 禁用时失效令牌，全部收在会员域内。

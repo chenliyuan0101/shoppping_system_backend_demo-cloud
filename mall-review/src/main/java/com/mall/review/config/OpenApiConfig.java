@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Configuration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import com.mall.common.support.MemberId;
 
 /**
  * OpenAPI / Swagger UI 配置（骨架抄自 user-center / 单体的同一份）。

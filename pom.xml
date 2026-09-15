@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        =====================================================================
+        mall-cloud 聚合工程（v5.2 新增）
+
+        为什么加它（这是"规范"层面的修补，不是新架构）：
+          · 9 个服务是 9 个**独立** Maven 工程（各自以 spring-boot-starter-parent 为 parent），
+            本来没有聚合 pom ⇒ 升一次版本要改 9 个文件、CI 只能逐个模块跑；
+          · v5.2 引入共享内核 `mall-common` 后，**每个服务都依赖它** ⇒ 没有 reactor 就必须先
+            `mvn -o install` mall-common 才能构建任何服务（离线仓库里没有它时直接失败）。
+            有了聚合工程，`mvn -o -f backend/mall-cloud/pom.xml test` 会在**同一次构建**里
+            先建 mall-common、再建各服务，顺序由 Maven 依赖图决定。
+
+        与既有脚本的关系：
+          · `build.ps1` 仍按模块逐个跑（它的价值是"逐服务打印 Tests run + 报告哪个服务在跑"），
+            但它现在**先 install 共享内核**（见脚本"0) 准备共享内核"段）；
+          · 想一次性全量回归/打包时用本聚合工程。
+
+        ⚠️ 各模块的 parent 仍是 `spring-boot-starter-parent`（保留 Boot 的依赖管理），
+           本工程只做**聚合**（packaging=pom，不继承给子模块）——这样不需要动任何服务 pom 的 parent。
+        =====================================================================
+    -->
+    <groupId>com.mall</groupId>
+    <artifactId>mall-cloud</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>mall-cloud</name>
+    <description>商城微服务后端聚合工程：共享内核 mall-common + 8 个领域服务 + 网关</description>
+
+    <modules>
+        <!-- 共享内核必须排第一（其余模块依赖它；reactor 也会按依赖图自动排序，这里显式声明便于阅读） -->
+        <module>mall-common</module>
+        <module>mall-gateway</module>
+        <module>mall-trade</module>
+        <module>mall-user-center</module>
+        <module>mall-product</module>
+        <module>mall-search</module>
+        <module>mall-review</module>
+        <module>mall-marketing</module>
+        <module>mall-content</module>
+        <module>mall-admin</module>
+    </modules>
+
+    <properties>
+        <maven.test.skip>false</maven.test.skip>
+    </properties>
+</project>

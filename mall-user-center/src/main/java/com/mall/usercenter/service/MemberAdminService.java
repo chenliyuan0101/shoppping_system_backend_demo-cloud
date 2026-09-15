@@ -1,5 +1,7 @@
 package com.mall.usercenter.service;
 
+import com.mall.common.support.MemberId;
+
 /**
  * 会员域的<b>管理写契约</b>（供后台使用）。
  *

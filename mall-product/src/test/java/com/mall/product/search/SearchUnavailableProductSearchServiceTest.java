@@ -5,7 +5,7 @@ import com.mall.product.service.ProductSearchService;
 import com.mall.product.service.impl.RemoteProductSearchService;
 import com.mall.product.service.impl.SearchUnavailableProductSearchService;
 import com.mall.product.support.CacheKeys;
-import com.mall.product.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.product.support.ProductTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

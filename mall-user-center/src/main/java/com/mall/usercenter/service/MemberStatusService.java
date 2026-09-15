@@ -1,6 +1,7 @@
 package com.mall.usercenter.service;
 
 import com.mall.usercenter.support.dto.MemberStatusVO;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员状态的只读入口（P3-1 落地的最小契约）。

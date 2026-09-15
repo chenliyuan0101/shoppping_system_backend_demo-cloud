@@ -1,6 +1,6 @@
 package com.mall.usercenter.client;
 
-import com.mall.usercenter.config.OutboundRestClientFactory;
+import com.mall.common.client.OutboundRestClientFactory;
 import com.mall.usercenter.support.ApiResponse;
 import com.mall.usercenter.support.dto.SkuSnapshotVO;
 import com.mall.usercenter.support.dto.SpuSnapshotVO;

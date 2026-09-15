@@ -3,6 +3,7 @@ package com.mall.usercenter.support.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.mall.common.support.MemberId;
 
 /**
  * 收货地址快照（域间契约）：下单时"取一次地址、把值写进订单"。

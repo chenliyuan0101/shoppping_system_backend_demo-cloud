@@ -148,7 +148,29 @@
             <artifactId>spring-boot-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
-    </dependencies>
+            <!--
+            代码规范闸门：《微服务代码规范.md》的可执行版本（命名后缀与包职责）。
+            只用到核心 API（ClassFileImporter + ArchRule）⇒ 引 archunit 而非 archunit-junit5；
+            与 mall-trade 的架构闸门（ModuleBoundaryTest）同一版本。
+        -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <version>1.4.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            v5.2：共享内核（非契约基础设施）。**没有**它就没有出站装配/头拦截器/traceId 过滤器/JSON、
+            缓存、分页、时间工具与网关身份头常量。契约面（ApiResponse/BusinessException/
+            GlobalExceptionHandler/PageResult）仍由本服务自持 —— 见《微服务代码规范.md》§6。
+            构建顺序：先 `mvn -o install` mall-common（离线仓库依赖它），再构建本模块。
+        -->
+        <dependency>
+            <groupId>com.mall</groupId>
+            <artifactId>mall-common</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+</dependencies>
 
     <build>
         <plugins>

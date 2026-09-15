@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import com.mall.common.support.MemberId;
 
 /**
  * {@link MemberSnapshotClient} 的降级契约：<b>取昵称失败必须是"空串"，绝不是异常</b>。

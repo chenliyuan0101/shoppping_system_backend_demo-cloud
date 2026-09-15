@@ -7,6 +7,7 @@ import com.mall.usercenter.support.dto.MemberStatusVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员状态只读实现：只读自己的表、只产出契约快照。

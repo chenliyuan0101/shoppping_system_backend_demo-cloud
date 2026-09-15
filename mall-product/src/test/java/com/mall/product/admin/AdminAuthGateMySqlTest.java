@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import com.mall.common.support.JsonKit;
 
 /**
  * <b>后台端点鉴权闸套件（P6-1b）</b>：{@code /api/admin/**} 在本服务内是否真的拦得住。
@@ -150,7 +151,7 @@ class AdminAuthGateMySqlTest extends ProductTestBase {
 
         MvcResult r = mockMvc.perform(post("/api/admin/product")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(com.mall.product.support.JsonKit.toJson(
+                        .content(com.mall.common.support.JsonKit.toJson(
                                 minimalProductBody("匿名写入尝试-" + suffix))))
                 .andExpect(status().isOk()).andReturn();
 
@@ -210,7 +211,7 @@ class AdminAuthGateMySqlTest extends ProductTestBase {
 
         MvcResult r = perform(post("/api/admin/product")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(com.mall.product.support.JsonKit.toJson(minimalProductBody(title))))
+                .content(com.mall.common.support.JsonKit.toJson(minimalProductBody(title))))
                 .andExpect(status().isOk()).andReturn();
 
         assertEquals(0, codeOf(body(r)), "带正确令牌的写入必须成功，body=" + body(r));

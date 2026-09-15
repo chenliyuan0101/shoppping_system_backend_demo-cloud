@@ -1,7 +1,7 @@
 package com.mall.admin.config;
 
 import com.mall.admin.domain.AdminUser;
-import com.mall.admin.support.AuthAttribute;
+import com.mall.common.support.AuthAttribute;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;

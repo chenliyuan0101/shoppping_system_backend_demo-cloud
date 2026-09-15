@@ -12,7 +12,7 @@ import com.mall.content.mapper.BannerMapper;
 import com.mall.content.mapper.NoticeMapper;
 import com.mall.content.service.HomeService;
 import com.mall.content.support.CacheKeys;
-import com.mall.content.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.content.support.constant.EnableStatus;
 import com.mall.content.support.dto.HomeFeedVO;
 import com.mall.content.support.dto.ProductListItemVO;

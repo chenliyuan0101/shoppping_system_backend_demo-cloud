@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 用户券 Mapper：本服务的**状态机就住在这里的三条条件 UPDATE 里**（P5 三态的核心）。

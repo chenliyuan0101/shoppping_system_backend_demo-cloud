@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import com.mall.common.support.CacheService;
 
 /**
  * 令牌版本号(基于 Redis 的"无状态 JWT 主动失效"方案；自持副本，与单体/user-center 逐字同构)。

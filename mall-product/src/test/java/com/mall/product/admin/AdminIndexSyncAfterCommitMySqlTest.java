@@ -2,7 +2,7 @@ package com.mall.product.admin;
 
 import com.jayway.jsonpath.JsonPath;
 import com.mall.product.service.ProductSearchService;
-import com.mall.product.support.JsonKit;
+import com.mall.common.support.JsonKit;
 import com.mall.product.support.ProductTestBase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

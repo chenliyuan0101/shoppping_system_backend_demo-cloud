@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员/地址/购物车的<b>内部接口</b>（服务间调用，{@code /internal/**} 由

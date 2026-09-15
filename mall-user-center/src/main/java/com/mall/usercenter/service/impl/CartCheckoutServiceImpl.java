@@ -1,7 +1,7 @@
 package com.mall.usercenter.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mall.usercenter.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.usercenter.support.dto.CartClaimResultVO;
 import com.mall.usercenter.support.dto.CartItemSnapshotVO;
 import com.mall.usercenter.domain.CartItem;
@@ -16,6 +16,7 @@ import tools.jackson.core.type.TypeReference;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 购物车结算契约实现：把"读要结算的条目"和"原子清空"这两步留在购物车域内。

@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import com.mall.common.support.MemberId;
 
 /**
  * {@code POST /internal/v1/marketing/coupon/lock} 的请求体：下单占用这张券（{@code 0 → 3}）。

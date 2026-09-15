@@ -1,6 +1,6 @@
 package com.mall.usercenter.support;
 
-import com.mall.usercenter.support.JsonKit;
+import com.mall.common.support.JsonKit;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;

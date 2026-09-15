@@ -14,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import com.mall.common.support.MemberId;
 
 /**
  * 消费 {@code order.closed}，把该单锁定的券**再解一次**（P5 步骤 E 的第二道防线）。

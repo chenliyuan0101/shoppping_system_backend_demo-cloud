@@ -6,7 +6,7 @@
 #   DB_USERNAME=xxx DB_PASSWORD=xxx \
 #   MALL_JWT_SECRET=... \
 #   MALL_MQ_ENABLED=true RABBITMQ_HOST=rabbitmq RABBITMQ_USERNAME=xxx RABBITMQ_PASSWORD=xxx \
-#   java -jar mall-server.jar
+#   java -jar mall-trade-0.0.1-SNAPSHOT.jar
 # 注：MinIO 相关环境变量(MINIO_*)现在由 mall-content 使用，单体不再需要。
 # 注：ES 相关环境变量(ES_URIS/ES_USERNAME/ES_PASSWORD/ES_CA_CERT)在 P6-5 #6 之后**单体不再需要**
 #     —— 索引域（含 ES 客户端与证书）全在 mall-search，单体的 /api/admin/es/** 只做转发。
@@ -73,7 +73,7 @@ springdoc:
 logging:
   level:
     root: info
-    com.mall.demo: info
+    com.mall.trade: info
     org.apache.ibatis: info
     org.springframework.web.servlet.DispatcherServlet: info
 

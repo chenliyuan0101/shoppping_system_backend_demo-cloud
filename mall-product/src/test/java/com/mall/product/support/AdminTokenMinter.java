@@ -5,6 +5,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import com.mall.common.support.MemberId;
 
 /**
  * 测试用的**管理员 JWT 签发器**（P6-1b）。

@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 评价的**跨服务契约快照**（不是持久层实体）。

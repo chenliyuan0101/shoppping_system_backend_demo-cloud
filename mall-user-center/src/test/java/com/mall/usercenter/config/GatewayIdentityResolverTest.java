@@ -1,13 +1,14 @@
 package com.mall.usercenter.config;
 
 import com.mall.usercenter.support.BusinessException;
-import com.mall.usercenter.support.GatewayAuthHeaders;
+import com.mall.common.support.GatewayAuthHeaders;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.mall.common.support.MemberId;
 
 /**
  * {@link GatewayIdentityResolver} 单测（无需数据库/Redis）。

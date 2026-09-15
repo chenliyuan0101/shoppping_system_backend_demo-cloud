@@ -1,6 +1,6 @@
 package com.mall.review.client;
 
-import com.mall.review.config.OutboundRestClientFactory;
+import com.mall.common.client.OutboundRestClientFactory;
 import com.mall.review.support.ApiResponse;
 import com.mall.review.support.dto.MemberNicknameVO;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.support.RestClientAdapter;
 import org.springframework.web.service.invoker.HttpServiceProxyFactory;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员域出站客户端：**只取昵称**，用于"提交评价时落昵称快照"。

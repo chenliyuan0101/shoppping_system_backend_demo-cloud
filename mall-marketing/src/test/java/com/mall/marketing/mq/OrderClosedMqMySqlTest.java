@@ -21,6 +21,7 @@ import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import com.mall.common.support.MemberId;
 
 /**
  * <b>P5 步骤 E 的核心验收</b>：{@code order.closed} → 券解锁兜底的<b>真 MQ + 真库</b>端到端。

@@ -1,6 +1,7 @@
 package com.mall.usercenter.service;
 
 import com.mall.usercenter.support.dto.AddressSnapshotVO;
+import com.mall.common.support.MemberId;
 
 /**
  * 收货地址的<b>只读契约</b>（供其它域使用，主要是下单链路）。

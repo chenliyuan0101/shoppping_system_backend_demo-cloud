@@ -6,6 +6,7 @@ import org.springframework.amqp.core.MessageProperties;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import com.mall.common.support.JsonKit;
 
 /**
  * MQ 消息的编解码小工具：统一"JSON 正文 + 自定义头"的约定（P5 步骤 E 从单体共享内核复制的契约副本）。

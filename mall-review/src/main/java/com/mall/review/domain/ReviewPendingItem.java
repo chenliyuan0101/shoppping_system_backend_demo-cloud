@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 待评价读模型，对应 {@code mall_review.review_pending_item}（表结构见 db/01-mall_review-schema.sql）。

@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 商品评价，对应 {@code mall_review.pms_comment}（表结构见 db/01-mall_review-schema.sql）。

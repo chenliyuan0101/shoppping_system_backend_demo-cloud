@@ -7,7 +7,7 @@ import com.mall.marketing.dto.AdminCouponSaveRequest;
 import com.mall.marketing.dto.CouponRecordVO;
 import com.mall.marketing.service.AdminCouponService;
 import com.mall.marketing.support.ApiResponse;
-import com.mall.marketing.support.PageKit;
+import com.mall.common.support.PageKit;
 import com.mall.marketing.support.PageResult;
 import com.mall.marketing.support.RequestValidator;
 import lombok.RequiredArgsConstructor;

@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import com.mall.common.support.MemberId;
 
 /**
  * 浏览足迹，对应 ums_footprint(member_id+spu_id 唯一，浏览刷新时间)。

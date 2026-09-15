@@ -3,7 +3,7 @@ package com.mall.review.service.impl;
 import com.mall.review.domain.Comment;
 import com.mall.review.mapper.CommentMapper;
 import com.mall.review.service.CommentCountService;
-import com.mall.review.support.JsonKit;
+import com.mall.common.support.JsonKit;
 import com.mall.review.support.dto.CommentBriefVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

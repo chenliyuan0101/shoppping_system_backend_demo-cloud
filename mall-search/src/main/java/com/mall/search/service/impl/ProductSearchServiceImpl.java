@@ -22,7 +22,7 @@ import com.mall.search.mq.ProductSyncPublisher;
 import com.mall.search.service.ProductSearchService;
 import com.mall.search.support.BusinessException;
 import com.mall.search.support.CacheKeys;
-import com.mall.search.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.search.support.constant.EnableStatus;
 import com.mall.search.support.dto.ReindexResult;
 import lombok.RequiredArgsConstructor;

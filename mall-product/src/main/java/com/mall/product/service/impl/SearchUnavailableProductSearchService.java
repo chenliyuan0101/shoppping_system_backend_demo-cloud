@@ -7,7 +7,7 @@ import com.mall.product.dto.ProductSearchDoc;
 import com.mall.product.mapper.SpuMapper;
 import com.mall.product.service.ProductSearchService;
 import com.mall.product.support.CacheKeys;
-import com.mall.product.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.product.support.constant.EnableStatus;
 import com.mall.product.support.dto.ReindexResult;
 import lombok.RequiredArgsConstructor;

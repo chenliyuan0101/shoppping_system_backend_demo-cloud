@@ -1,7 +1,7 @@
 package com.mall.marketing.config;
 
 import com.mall.marketing.support.BusinessException;
-import com.mall.marketing.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.marketing.support.RateLimit;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
@@ -29,6 +29,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import com.mall.common.support.MemberId;
 
 /**
  * <b>限流切面的纯单测</b>（不起 Spring 上下文、不连数据库）。

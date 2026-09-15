@@ -1,6 +1,6 @@
 package com.mall.review.mq;
 
-import com.mall.review.support.MallTime;
+import com.mall.common.support.MallTime;
 import com.mall.review.support.MqMessages;
 import com.mall.review.support.MqTopology;
 import com.mall.review.support.ReviewTestBase;
@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import com.mall.common.support.MemberId;
 
 /**
  * <b>P4-2 的核心验收</b>：{@code order.finished} → 待评价读模型的真 MQ 端到端。

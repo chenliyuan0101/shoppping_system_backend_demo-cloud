@@ -4,7 +4,7 @@
 # =====================================================================
 spring:
   application:
-    name: mall-server        # 应用名(日志/注册用)
+    name: mall-trade          # 应用名 = Nacos 注册名 = 模块名 = jar 名（见下方 history 注释）
   profiles:
     active: dev              # 默认启用 dev；生产用 SPRING_PROFILES_ACTIVE=prod 覆盖
   # =====================================================================
@@ -34,12 +34,12 @@ spring:
       max-file-size: 10MB
       max-request-size: 15MB
   # =====================================================================
-  # P1：过渡期作为"单体服务"注册进 Nacos，注册名 mall-trade
-  #   · 应用名仍叫 mall-server（日志身份不变），注册名单独指定；
-  #   · 网关按 lb://mall-trade 路由，前端只认网关 8000；
-  #   · 连接地址在 application-dev/prod.yaml（环境相关）；
-  #   · 测试环境在 src/test/resources/application.properties 里整体关闭注册。
-  # 每抽出一个服务，就从网关路由表里把对应路径从 mall-trade 切到新服务。
+  # Nacos 注册：注册名 `mall-trade`（网关按 lb://mall-trade 路由，前端只认网关 8000）
+  #   · 规范化（2026-09-15）：`spring.application.name` 已从历史的 `mall-server` 改成 `mall-trade`
+  #     —— 曾出现**一个服务两个名字**（模块/jar/目录/DB schema 叫 mall-trade，日志前缀叫 mall-server），
+  #     P8-2 更名遗留。现在四个身份同值，`service:` 这行虽与默认推导同值，但**显式钉住**避免默认值漂移。
+  #   · 连接地址在 application-dev/prod.yaml（环境相关）；测试环境在 src/test/resources/application.properties 整体关闭注册。
+  #   · 每抽出一个服务，就从网关路由表里把对应路径从 mall-trade 切到新服务。
   # =====================================================================
   cloud:
     nacos:

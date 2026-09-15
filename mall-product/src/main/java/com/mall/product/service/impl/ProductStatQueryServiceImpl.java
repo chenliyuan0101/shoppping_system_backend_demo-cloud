@@ -1,7 +1,7 @@
 package com.mall.product.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mall.product.support.PageKit;
+import com.mall.common.support.PageKit;
 import com.mall.product.support.constant.EnableStatus;
 import com.mall.product.support.dto.SpuSnapshotVO;
 import com.mall.product.domain.Spu;

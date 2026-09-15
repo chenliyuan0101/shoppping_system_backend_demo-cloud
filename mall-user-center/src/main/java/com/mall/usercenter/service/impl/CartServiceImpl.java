@@ -3,9 +3,9 @@ package com.mall.usercenter.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mall.usercenter.client.ProductSnapshotClient;
 import com.mall.usercenter.support.BusinessException;
-import com.mall.usercenter.support.JsonKit;
+import com.mall.common.support.JsonKit;
 import com.mall.usercenter.support.constant.EnableStatus;
-import com.mall.usercenter.support.constant.YesNo;
+import com.mall.common.constant.YesNo;
 import com.mall.usercenter.support.dto.SkuSnapshotVO;
 import com.mall.usercenter.support.dto.SpuSnapshotVO;
 import com.mall.usercenter.domain.CartItem;
@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import com.mall.common.support.MemberId;
 
 /**
  * 购物车实现：条目存 ums_cart_item，展示时关联 SKU/SPU 现价与规格。

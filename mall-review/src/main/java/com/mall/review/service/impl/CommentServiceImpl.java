@@ -12,8 +12,8 @@ import com.mall.review.mapper.CommentMapper;
 import com.mall.review.mapper.ReviewPendingItemMapper;
 import com.mall.review.service.CommentService;
 import com.mall.review.support.BusinessException;
-import com.mall.review.support.JsonKit;
-import com.mall.review.support.PageKit;
+import com.mall.common.support.JsonKit;
+import com.mall.common.support.PageKit;
 import com.mall.review.support.PageResult;
 import com.mall.review.support.RequestValidator;
 import com.mall.review.support.constant.CommentStatus;
@@ -33,6 +33,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import com.mall.common.support.MemberId;
 
 /**
  * 评价实现：<b>校验与抢占全部在本地</b>（本服务的 {@code review_pending_item} + {@code pms_comment}）。

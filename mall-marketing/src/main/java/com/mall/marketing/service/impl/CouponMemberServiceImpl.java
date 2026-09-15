@@ -11,7 +11,7 @@ import com.mall.marketing.service.CouponMemberService;
 import com.mall.marketing.support.BusinessException;
 import com.mall.marketing.support.CouponRules;
 import com.mall.marketing.support.CouponStatusProjection;
-import com.mall.marketing.support.MallTime;
+import com.mall.common.support.MallTime;
 import com.mall.marketing.support.constant.CouponMemberStatus;
 import com.mall.marketing.support.constant.CouponStatus;
 import com.mall.marketing.support.constant.CouponValidType;
@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.mall.common.support.MemberId;
 
 /**
  * 会员侧券实现。一期每张券模板每会员限领 1 张(表 unique 保证，与 perMemberLimit>=1 语义一致)。

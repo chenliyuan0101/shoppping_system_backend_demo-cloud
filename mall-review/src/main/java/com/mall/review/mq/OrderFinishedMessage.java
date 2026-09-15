@@ -1,6 +1,7 @@
 package com.mall.review.mq;
 
 import java.util.List;
+import com.mall.common.support.MemberId;
 
 /**
  * 确认收货事件载荷（P4-2）——单体 {@code com.mall.demo.oms.mq.OrderFinishedMessage} 的契约副本。
@@ -20,7 +21,7 @@ import java.util.List;
  * @param orderNo      订单号
  * @param memberId     会员 id；null 时本服务不写读模型（读模型的归属校验离不开它）
  * @param finishedTime 确认收货时间（epoch millis；评价期限从这里算，落库时按
- *                     业务时区 {@link com.mall.review.support.MallTime#ZONE} 转 datetime）
+ *                     业务时区 {@link com.mall.common.support.MallTime#ZONE} 转 datetime）
  * @param items        订单明细快照
  */
 public record OrderFinishedMessage(String orderNo, Long memberId, long finishedTime, List<Item> items) {

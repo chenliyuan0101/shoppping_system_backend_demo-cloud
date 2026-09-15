@@ -2,7 +2,7 @@ package com.mall.admin.config;
 
 import com.mall.admin.support.BusinessException;
 import com.mall.admin.support.CacheKeys;
-import com.mall.admin.support.CacheService;
+import com.mall.common.support.CacheService;
 import com.mall.admin.support.RateLimit;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;

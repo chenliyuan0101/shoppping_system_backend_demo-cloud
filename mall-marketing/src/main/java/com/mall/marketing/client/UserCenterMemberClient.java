@@ -1,6 +1,6 @@
 package com.mall.marketing.client;
 
-import com.mall.marketing.config.OutboundRestClientFactory;
+import com.mall.common.client.OutboundRestClientFactory;
 import com.mall.marketing.support.ApiResponse;
 import com.mall.marketing.support.BusinessException;
 import com.mall.marketing.support.dto.MemberBriefVO;

@@ -1,5 +1,7 @@
 package com.mall.marketing.service;
 
+import com.mall.common.support.MemberId;
+
 /**
  * 券三态命令契约（{@code UNUSED ⇄ LOCKED → USED}），P5 的核心。
  *

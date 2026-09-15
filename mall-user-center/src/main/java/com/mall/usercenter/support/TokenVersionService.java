@@ -1,7 +1,7 @@
 package com.mall.usercenter.support;
 
 import com.mall.usercenter.support.CacheKeys;
-import com.mall.usercenter.support.CacheService;
+import com.mall.common.support.CacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

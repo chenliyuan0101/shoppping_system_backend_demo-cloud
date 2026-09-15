@@ -2,10 +2,10 @@ package com.mall.product.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mall.product.support.BusinessException;
-import com.mall.product.support.PageKit;
+import com.mall.common.support.PageKit;
 import com.mall.product.support.CacheKeys;
-import com.mall.product.support.CacheService;
-import com.mall.product.support.JsonKit;
+import com.mall.common.support.CacheService;
+import com.mall.common.support.JsonKit;
 import com.mall.product.support.PageResult;
 import com.mall.product.support.constant.EnableStatus;
 import com.mall.product.domain.Brand;
