@@ -1,17 +1,17 @@
 package com.mall.review.client;
 
+import com.mall.review.config.OutboundRestClientFactory;
 import com.mall.review.support.ApiResponse;
 import com.mall.review.support.dto.MemberNicknameVO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
-
-import java.time.Duration;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
 /**
  * 会员域出站客户端：**只取昵称**，用于"提交评价时落昵称快照"。
@@ -28,6 +28,16 @@ import java.time.Duration;
  * 调用频率是"每次提交评价一次"（不是每次展示），且**失败绝不影响提交**（见 {@link #nickname(Long)}）。
  * 这条兜底路径记在 P4 报告里，属于"快照没有本地来源"时的显式取舍。
  *
+ * <h2>P8-7 起：HTTP 调用改由声明式接口 {@link MemberSnapshotApi} 承担</h2>
+ * 本类保留**域语义**三件事，其余（路径模板/动词/请求头/反序列化泛型）交给接口：
+ * <ul>
+ *   <li><b>连接装配</b>：{@code lb://} 走服务发现（{@code @LoadBalanced} 的 builder，其上已挂
+ *       {@code OutboundHeadersInterceptor}）、{@code http://} 直连排障（同一套头由
+ *       {@link OutboundRestClientFactory} 补齐），connect 300ms / read 1500ms 的硬超时在这里设；</li>
+ *   <li><b>降级语义</b>：任何失败（不可达/超时/业务码非 0/昵称为空）→ **空串，绝不抛**；</li>
+ *   <li><b>日志</b>：失败怎么记（一条 WARN 的措辞）由本类定，接口层不打日志。</li>
+ * </ul>
+ *
  * <h2>三条纪律</h2>
  * <ol>
  *   <li><b>硬超时</b>（connect 300ms / read 1500ms）：这是用户可感知的写路径，
@@ -43,28 +53,39 @@ import java.time.Duration;
 @Component
 public class MemberSnapshotClient {
 
-    private static final String HEADER_INTERNAL_TOKEN = "X-Internal-Token";
+    private final MemberSnapshotApi api;
 
-    /** user-center 的会员档案快照端点（P3 就已存在，本服务只是消费方） */
-    private static final String SNAPSHOT_PATH = "/internal/v1/user/member/{id}/snapshot";
-
-    private final RestClient restClient;
-    private final String internalToken;
-
+    /**
+     * 生产装配：服务发现版 builder + 统一的出站装配（超时/直连头）+ 原本的配置项。
+     *
+     * <p>显式 {@code @Autowired}：本类另有下面那个"直连/单测"用的构造器，两个构造器并存时
+     * 必须指明 Spring 用哪一个（否则启动即失败）。
+     */
+    @Autowired
     public MemberSnapshotClient(@LoadBalanced RestClient.Builder loadBalancedBuilder,
+                                OutboundRestClientFactory restClients,
                                 @Value("${mall.user-center.base-url:lb://mall-user-center}") String baseUrl,
-                                @Value("${mall.internal.token:}") String internalToken,
                                 @Value("${mall.user-center.connect-timeout-ms:300}") long connectTimeoutMs,
                                 @Value("${mall.user-center.read-timeout-ms:1500}") long readTimeoutMs) {
-        // 只有 lb:// 才需要服务发现版 builder；直连地址（本地排障/测试）用普通 builder
-        RestClient.Builder builder = baseUrl.startsWith("lb://") ? loadBalancedBuilder : RestClient.builder();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        this.restClient = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
-        this.internalToken = internalToken;
+        RestClient restClient = restClients.build(loadBalancedBuilder, baseUrl, connectTimeoutMs, readTimeoutMs);
+        this.api = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(MemberSnapshotApi.class);
         log.info("会员域客户端就绪: base-url={} connect-timeout={}ms read-timeout={}ms",
                 baseUrl, connectTimeoutMs, readTimeoutMs);
+    }
+
+    /**
+     * 直连构造：<b>保留给"真客户端 + 一个必然连不上的地址"这类单测</b>
+     * （{@code MemberSnapshotClientTest} 直接 {@code new} 的就是这个签名，它要证明的正是
+     * "连接被拒/超时"被收敛成空串，换成 mock 恰好会把被测的那段代码换掉）。
+     *
+     * <p>内部走**同一个** {@link OutboundRestClientFactory}（用传入的令牌现造一个），
+     * 于是单测与生产的出站装配（超时、{@code X-Internal-Token}）完全一致，不会"测的是另一套客户端"。
+     */
+    public MemberSnapshotClient(RestClient.Builder builder, String baseUrl, String internalToken,
+                                long connectTimeoutMs, long readTimeoutMs) {
+        this(builder, new OutboundRestClientFactory(internalToken), baseUrl, connectTimeoutMs, readTimeoutMs);
     }
 
     /**
@@ -78,12 +99,7 @@ public class MemberSnapshotClient {
             return "";
         }
         try {
-            ApiResponse<MemberNicknameVO> response = restClient.get()
-                    .uri(SNAPSHOT_PATH, memberId)
-                    .header(HEADER_INTERNAL_TOKEN, internalToken)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<ApiResponse<MemberNicknameVO>>() {
-                    });
+            ApiResponse<MemberNicknameVO> response = api.snapshot(memberId);
             if (response == null || response.getCode() != ApiResponse.SUCCESS || response.getData() == null) {
                 log.warn("会员昵称快照不可用，评价的昵称快照落空串: memberId={} code={}",
                         memberId, response == null ? null : response.getCode());

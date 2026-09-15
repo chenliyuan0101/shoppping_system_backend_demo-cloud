@@ -7,12 +7,10 @@ import com.mall.demo.common.dto.SearchStatusVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-
-import java.time.Duration;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
 /**
  * 检索域**运维**客户端：把"重建索引"与"自检快照"转给 {@code mall-search}。
@@ -33,7 +31,8 @@ import java.time.Duration;
  * 单体侧的自检变成"问检索域要一份快照"，五个集群字段由 {@code mall-search} 提供
  * （见 {@code SearchStatusVO}）。
  *
- * <h2>错误语义</h2>
+ * <h2>HTTP 调用改由声明式接口 {@link SearchOpsApi} 承担</h2>
+ * 路径与动词集中写在接口里；本类保留两套**刻意不同**的错误语义（改接口时一字未动）：
  * <ul>
  *   <li>{@link #reindex()}：传输异常/空响应 → {@code 500「系统繁忙，请稍后重试」}；
  *       下游业务码（例如 search 侧"取不满"的 500 文案）**原样透传** —— 那正是运维需要看到的原始原因，
@@ -42,32 +41,30 @@ import java.time.Duration;
  *       （例如 {@code 检索域不可达: Connection refused}）—— 自检接口要把原因写进
  *       {@code error} 字段给运维看，包装成"系统繁忙"等于把唯一的线索丢掉。</li>
  * </ul>
+ * 内部密钥 {@code X-Internal-Token} 不再手工写：{@code lb://} 走 {@code @LoadBalanced} builder 上的
+ * {@code OutboundHeadersInterceptor}，{@code http://} 直连由
+ * {@link OutboundRestClientFactory} 显式挂同一个拦截器。
  */
 @Slf4j
 @Component
 public class SearchOpsClient {
 
-    private static final String REINDEX_PATH = "/internal/v1/search/reindex";
-    private static final String STATUS_PATH = "/internal/v1/search/status";
     private static final String DOWNSTREAM_ERROR_MESSAGE = "系统繁忙，请稍后重试";
 
-    private final RestClient restClient;
-    private final String internalToken;
+    private final SearchOpsApi api;
 
     public SearchOpsClient(@LoadBalanced RestClient.Builder loadBalancedBuilder,
+                           OutboundRestClientFactory restClients,
                            @Value("${mall.search.base-url:lb://mall-search}") String baseUrl,
-                           @Value("${mall.internal.token:}") String internalToken,
                            @Value("${mall.search.connect-timeout-ms:300}") long connectTimeoutMs,
                            @Value("${mall.search.read-timeout-ms:2500}") long readTimeoutMs) {
         // 与 mall-product 的检索客户端同口径：lb:// 走服务发现，直连地址则不走（便于把地址指到别处做演练）
-        RestClient.Builder builder = baseUrl.startsWith("lb://") ? loadBalancedBuilder : RestClient.builder();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        this.restClient = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
-        this.internalToken = internalToken;
+        RestClient restClient = restClients.build(loadBalancedBuilder, baseUrl, connectTimeoutMs, readTimeoutMs);
+        this.api = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(SearchOpsApi.class);
         // 打印当前指向，便于活体核对"重建到底转发到哪了"（与 D2 要求的启动日志同一用途）
-        log.info("检索域运维客户端就绪: base-url={}, connect-timeout={}ms, read-timeout={}ms",
+        log.info("检索域运维客户端就绪(HTTP Interface): base-url={}, connect-timeout={}ms, read-timeout={}ms",
                 baseUrl, connectTimeoutMs, readTimeoutMs);
     }
 
@@ -80,11 +77,7 @@ public class SearchOpsClient {
     public ReindexResult reindex() {
         ApiResponse<ReindexResult> response;
         try {
-            response = restClient.post().uri(REINDEX_PATH)
-                    .header("X-Internal-Token", internalToken)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<ApiResponse<ReindexResult>>() {
-                    });
+            response = api.reindex();
         } catch (Exception e) {
             log.error("调用检索域重建索引失败: {}", e.getMessage(), e);
             throw new BusinessException(500, DOWNSTREAM_ERROR_MESSAGE);
@@ -114,11 +107,7 @@ public class SearchOpsClient {
     public SearchStatusVO status() {
         ApiResponse<SearchStatusVO> response;
         try {
-            response = restClient.get().uri(STATUS_PATH)
-                    .header("X-Internal-Token", internalToken)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<ApiResponse<SearchStatusVO>>() {
-                    });
+            response = api.status();
         } catch (Exception e) {
             log.warn("调用检索域自检失败: {}", e.getMessage());
             // ⚠️ 与 reindex 不同：这里把**真实原因**带出去（自检接口要把它展示给运维）

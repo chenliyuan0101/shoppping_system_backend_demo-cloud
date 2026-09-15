@@ -1,5 +1,6 @@
 package com.mall.product.client;
 
+import com.mall.product.config.OutboundRestClientFactory;
 import com.mall.product.dto.ProductIdPage;
 import com.mall.product.dto.ProductSearchDoc;
 import com.mall.product.dto.SearchStatusVO;
@@ -7,21 +8,34 @@ import com.mall.product.support.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
- * 检索域出站客户端（P6-3）：调 {@code mall-search} 的 6 个内部端点。
+ * 检索域出站客户端（P6-3）：调 {@code mall-search} 的 7 个内部端点。
  *
  * <h2>为什么是"客户端"而不是把 RestClient 写在 Service 里</h2>
  * 这样测试可以在**这一层**换替身（{@code @MockitoBean SearchProductsClient}），
  * 而{@code RemoteProductSearchService} 的"哪种失败怎么回落"逻辑仍然是被测的真代码。
+ *
+ * <h2>P8-7 起：HTTP 调用改由声明式接口 {@link SearchProductsApi} 承担</h2>
+ * 本类保留**域语义**三件事，其余（路径/动词/请求头/反序列化泛型）交给接口：
+ * <ul>
+ *   <li><b>连接装配</b>：{@code lb://} 走服务发现（{@code @LoadBalanced} 的 builder，其上已挂
+ *       {@code OutboundHeadersInterceptor} 统一注入 {@code X-Internal-Token} / {@code X-Trace-Id}）、
+ *       {@code http://} 直连（排障/演练，也由 {@link OutboundRestClientFactory} 补上同一套头），
+ *       并按域设置 connect/read 超时；</li>
+ *   <li><b>错误语义</b>：传输失败 / 超时 / 空响应 → {@link SearchRemoteException}（带 uri 与原因）；
+ *       下游业务码非 0 **原样返回**，由调用方决定回落与日志；</li>
+ *   <li><b>数据形状适配</b>：检索请求体按下游契约拼装（{@code categoryIds} 为 null ⇒ 空数组，
+ *       而不是 JSON {@code null}），分页/排序字段名逐字对齐 mall-search 的内部端点。</li>
+ * </ul>
  *
  * <h2>错误处理口径（与 mall-search 的 {@code ProductIndexDocClient} 同一套，不另立一套）</h2>
  * <ul>
@@ -39,22 +53,24 @@ import java.util.Map;
 @Component
 public class SearchProductsClient {
 
+    /**
+     * 端点前缀。**路径的唯一来源是 {@link SearchProductsApi}**（接口上的 {@code @HttpExchange}），
+     * 这里保留常量只为一件事：失败/空响应文案里带上与改造前**逐字相同**的 uri
+     * （调用方会把 {@code e.getMessage()} 拼进降级原因与 WARN 日志）。
+     */
     private static final String BASE = "/internal/v1/search";
 
-    private final RestClient restClient;
-    private final String internalToken;
+    private final SearchProductsApi api;
 
     public SearchProductsClient(@LoadBalanced RestClient.Builder loadBalancedBuilder,
+                                OutboundRestClientFactory restClients,
                                 @Value("${mall.search.base-url:lb://mall-search}") String baseUrl,
-                                @Value("${mall.internal.token:}") String internalToken,
                                 @Value("${mall.search.connect-timeout-ms:300}") long connectTimeoutMs,
                                 @Value("${mall.search.read-timeout-ms:2500}") long readTimeoutMs) {
-        RestClient.Builder builder = baseUrl.startsWith("lb://") ? loadBalancedBuilder : RestClient.builder();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        this.restClient = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
-        this.internalToken = internalToken;
+        RestClient restClient = restClients.build(loadBalancedBuilder, baseUrl, connectTimeoutMs, readTimeoutMs);
+        this.api = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(SearchProductsApi.class);
         log.info("检索域客户端就绪: base-url={}, connect-timeout={}ms, read-timeout={}ms",
                 baseUrl, connectTimeoutMs, readTimeoutMs);
     }
@@ -72,51 +88,48 @@ public class SearchProductsClient {
         body.put("sort", sort);
         body.put("pageNum", pageNum);
         body.put("pageSize", pageSize);
-        return post(BASE + "/products", body, new ParameterizedTypeReference<ApiResponse<ProductIdPage>>() {
-        });
+        return call(BASE + "/products", () -> api.searchProducts(body));
     }
 
     /** 全量重建索引（运维端点；本服务无调用方，见 {@code RemoteProductSearchService#reindex}） */
     public ApiResponse<com.mall.product.support.dto.ReindexResult> reindex() {
-        return post(BASE + "/reindex", Map.of(),
-                new ParameterizedTypeReference<ApiResponse<com.mall.product.support.dto.ReindexResult>>() {
-                });
+        return call(BASE + "/reindex", () -> api.reindex(Map.of()));
     }
 
     /** 自检快照：文档数 / 待同步数 / 分词器 */
     public ApiResponse<SearchStatusVO> status() {
-        return get(BASE + "/status", new ParameterizedTypeReference<ApiResponse<SearchStatusVO>>() {
-        });
+        return call(BASE + "/status", api::status);
     }
 
     /** 单条同步（在架则写、下架则删）；返回 true=已按最新状态落索引 */
     public ApiResponse<Boolean> syncProduct(long spuId) {
-        return post(BASE + "/sync/" + spuId, Map.of(), new ParameterizedTypeReference<ApiResponse<Boolean>>() {
-        });
+        return call(BASE + "/sync/" + spuId, () -> api.syncProduct(spuId, Map.of()));
     }
 
     /** 从索引删除（幂等） */
     public ApiResponse<Void> deleteProduct(long spuId) {
         try {
-            return restClient.delete().uri(BASE + "/product/" + spuId)
-                    .header("X-Internal-Token", internalToken)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
-                    });
+            ApiResponse<Void> response = api.deleteProduct(spuId);
+            if (response == null) {
+                // 空响应按传输失败处理：宁可回落，也不要把 null 当"删掉了"
+                throw new SearchRemoteException("检索域返回空响应: uri=" + BASE + "/product/" + spuId);
+            }
+            return response;
+        } catch (SearchRemoteException e) {
+            throw e;
         } catch (Exception e) {
+            // 文案与改造前逐字一致（这一步没有"业务码判断"，所以单独一条消息更好定位）
             throw new SearchRemoteException("调用检索域删除失败: spuId=" + spuId + " err=" + e.getMessage(), e);
         }
     }
 
     /** 品牌维度批量重写；返回成功同步条数 */
     public ApiResponse<Integer> syncByBrand(long brandId) {
-        return post(BASE + "/sync-by-brand/" + brandId, Map.of(),
-                new ParameterizedTypeReference<ApiResponse<Integer>>() {
-                });
+        return call(BASE + "/sync-by-brand/" + brandId, () -> api.syncByBrand(brandId, Map.of()));
     }
 
     /**
-     * 按 id 取**索引文档**（P6-5 #5 新端点；本服务侧唯一的调用方是
+     * 按 id 取**索引文档**（P6-5 #5 端点；本服务侧唯一的调用方是
      * {@code RemoteProductSearchService#findById}）。
      *
      * <p>三种结果必须分清（这是本方法存在的理由，别把后两种合成一种）：
@@ -129,38 +142,27 @@ public class SearchProductsClient {
      * </ul>
      */
     public ApiResponse<ProductSearchDoc> productDoc(long spuId) {
-        return get(BASE + "/product/" + spuId, new ParameterizedTypeReference<ApiResponse<ProductSearchDoc>>() {
-        });
+        return call(BASE + "/product/" + spuId, () -> api.productDoc(spuId));
     }
 
     // ==================== 内部 ====================
 
-    private <T> ApiResponse<T> post(String uri, Object body, ParameterizedTypeReference<ApiResponse<T>> type) {
+    /**
+     * 把"调用接口"这一步的**传输异常**收敛成 {@link SearchRemoteException}，并把空响应按失败处理。
+     *
+     * <p>为什么还要这层 try/catch：声明式接口解决的是"HTTP ↔ 类型"的样板，**不解决错误语义**——
+     * 连接被拒/读超时抛的是 {@code ResourceAccessException}，调用方
+     * （{@code RemoteProductSearchService}）要靠 {@link SearchRemoteException} 这一个类型
+     * 区分"读不到"与"下游说没有"，并据此回落 MySQL。
+     *
+     * @param uri        仅用于失败文案（路径本身在 {@link SearchProductsApi}）
+     * @param invocation 一次接口调用
+     */
+    private <T> ApiResponse<T> call(String uri, Supplier<ApiResponse<T>> invocation) {
         try {
-            ApiResponse<T> response = restClient.post().uri(uri)
-                    .header("X-Internal-Token", internalToken)
-                    .body(body)
-                    .retrieve()
-                    .body(type);
+            ApiResponse<T> response = invocation.get();
             if (response == null) {
                 // 空响应按传输失败处理：宁可回落，也不要把 null 当"没有数据"
-                throw new SearchRemoteException("检索域返回空响应: uri=" + uri);
-            }
-            return response;
-        } catch (SearchRemoteException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new SearchRemoteException("调用检索域失败: uri=" + uri + " err=" + e.getMessage(), e);
-        }
-    }
-
-    private <T> ApiResponse<T> get(String uri, ParameterizedTypeReference<ApiResponse<T>> type) {
-        try {
-            ApiResponse<T> response = restClient.get().uri(uri)
-                    .header("X-Internal-Token", internalToken)
-                    .retrieve()
-                    .body(type);
-            if (response == null) {
                 throw new SearchRemoteException("检索域返回空响应: uri=" + uri);
             }
             return response;

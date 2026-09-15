@@ -1,17 +1,15 @@
 package com.mall.content.client;
 
-import com.mall.content.config.InternalApiAuthInterceptor;
+import com.mall.content.config.OutboundRestClientFactory;
 import com.mall.content.support.ApiResponse;
 import com.mall.content.support.dto.HomeFeedVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-
-import java.time.Duration;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
 /**
  * 商品域出站客户端：首页商品区块（类目树 + 热门 + 新品）。
@@ -21,11 +19,27 @@ import java.time.Duration;
  * <ol>
  *   <li>地址走服务发现（{@code lb://mall-legacy}；P6 商品域独立后改成 {@code lb://mall-product}，
  *       本类只需改一行配置）；</li>
- *   <li>带内部共享密钥 {@code X-Internal-Token}（网关不路由 {@code /internal/**}，见 §4.10）；</li>
+ *   <li>带内部共享密钥 {@code X-Internal-Token}（网关不路由 {@code /internal/**}，见 §4.10）；
+ *       P8-7 起这个头**不再手工写**，由 {@code OutboundHeadersInterceptor} 统一注入；</li>
  *   <li>**硬超时**（默认 connect 200ms / read 300ms，§2.8 非关键路径档）；</li>
  *   <li>失败一律转成 {@link ProductFeedUnavailableException}，由调用方决定降级——
  *       本类不返回 null、不吞异常（null 会让"下游挂了"和"首页本来就没商品"混在一起）。</li>
  * </ol>
+ *
+ * <h2>P8-7 起：HTTP 调用改由声明式接口 {@link ProductFeedApi} 承担</h2>
+ * 本类保留**域语义**三件事，其余交给接口：
+ * <ul>
+ *   <li><b>连接装配</b>：{@code lb://} 走服务发现（{@code @LoadBalanced} 的 builder，其上已挂
+ *       {@code OutboundHeadersInterceptor}）、{@code http://} 直连（排障/演练用，由
+ *       {@link OutboundRestClientFactory} 显式挂同一个拦截器），并设置 connect/read 超时；</li>
+ *   <li><b>错误语义</b>：传输异常 / 空响应 / 业务码非 0 → {@link ProductFeedUnavailableException}
+ *       （与改造前逐字相同的文案），调用方据此 fail-open；</li>
+ *   <li><b>数据形状</b>：解包 {@code ApiResponse<HomeFeedVO>} → {@code HomeFeedVO}。</li>
+ * </ul>
+ *
+ * <h2>为什么保留这个类（而不是让调用方直接用接口）</h2>
+ * ① 上面那几件事仍需要一个落点；② 调用方（{@code HomeServiceImpl}）与真库套件的
+ * {@code @MockitoBean ProductFeedClient} 都对着**这个类**，保留它 ⇒ 服务层与测试一行都不用改。
  *
  * <p>配置：{@code mall.product.base-url}（默认 {@code lb://mall-product}；P8-2 起单体注册名为 mall-trade）。
  * 以 {@code http://} 开头时**绕过服务发现**直接连该地址——应急回退与本地排障用
@@ -41,30 +55,25 @@ import java.time.Duration;
  *       下游**进程不在**时是连接失败（300ms 内快速失败），不会等满读超时。</li>
  * </ul>
  * 口径写入方案 §2.9 与附录 F；P6 商品域独立部署、有了预热/多实例后重新评估。
+ *
+ * <p>⚠️ 路径前缀 {@code /internal/**}：网关有过滤器直接 404 这一前缀（外网永远看不到）。
  */
 @Slf4j
 @Component
 public class ProductFeedClient {
 
-    /** 商品域首页区块端点（契约形状见 {@link HomeFeedVO}） */
-    private static final String FEED_PATH = "/internal/v1/product/home-feed";
-
-    private final RestClient restClient;
-    private final String internalToken;
+    private final ProductFeedApi api;
 
     public ProductFeedClient(@LoadBalanced RestClient.Builder loadBalancedBuilder,
+                             OutboundRestClientFactory restClients,
                              @Value("${mall.product.base-url:lb://mall-product}") String baseUrl,
-                             @Value("${mall.internal.token:}") String internalToken,
                              @Value("${mall.product.connect-timeout-ms:300}") long connectTimeoutMs,
                              @Value("${mall.product.read-timeout-ms:2500}") long readTimeoutMs) {
-        // 只有 lb:// 才需要服务发现版 builder；直连地址用普通 builder，避免负载均衡器去解析一个 IP 主机名
-        RestClient.Builder builder = baseUrl.startsWith("lb://") ? loadBalancedBuilder : RestClient.builder();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        this.restClient = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
-        this.internalToken = internalToken;
-        log.info("商品域客户端就绪: base-url={}, connect-timeout={}ms, read-timeout={}ms",
+        RestClient restClient = restClients.build(loadBalancedBuilder, baseUrl, connectTimeoutMs, readTimeoutMs);
+        this.api = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(ProductFeedApi.class);
+        log.info("商品域客户端就绪(HTTP Interface): base-url={}, connect-timeout={}ms, read-timeout={}ms",
                 baseUrl, connectTimeoutMs, readTimeoutMs);
     }
 
@@ -72,29 +81,23 @@ public class ProductFeedClient {
      * 取首页商品区块。
      *
      * @param size 每个区块条数（商品域会夹取上限，见 {@code ProductQueryServiceImpl}）
-     * @throws ProductFeedUnavailableException 下游不可用/超时/返回非 0 业务码
+     * @throws ProductFeedUnavailableException 下游不可用/超时/空响应/返回非 0 业务码
      */
     public HomeFeedVO homeFeed(int size) {
+        ApiResponse<HomeFeedVO> response;
         try {
-            ApiResponse<HomeFeedVO> response = restClient.get()
-                    .uri(uri -> uri.path(FEED_PATH).queryParam("size", size).build())
-                    .header(InternalApiAuthInterceptor.HEADER_INTERNAL_TOKEN, internalToken)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<ApiResponse<HomeFeedVO>>() {
-                    });
-            if (response == null) {
-                throw new ProductFeedUnavailableException("商品域返回空响应体");
-            }
-            if (response.getCode() != ApiResponse.SUCCESS) {
-                throw new ProductFeedUnavailableException(
-                        "商品域返回业务错误: code=" + response.getCode() + ", message=" + response.getMessage());
-            }
-            return response.getData();
-        } catch (ProductFeedUnavailableException e) {
-            throw e;
+            response = api.homeFeed(size);
         } catch (Exception e) {
             // 超时、连接被拒、5xx、反序列化失败都收敛到"商品域不可用"，由调用方降级
             throw new ProductFeedUnavailableException("调用商品域首页区块失败: " + e, e);
         }
+        if (response == null) {
+            throw new ProductFeedUnavailableException("商品域返回空响应体");
+        }
+        if (response.getCode() != ApiResponse.SUCCESS) {
+            throw new ProductFeedUnavailableException(
+                    "商品域返回业务错误: code=" + response.getCode() + ", message=" + response.getMessage());
+        }
+        return response.getData();
     }
 }

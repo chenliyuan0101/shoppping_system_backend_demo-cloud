@@ -1,5 +1,6 @@
 package com.mall.admin.client;
 
+import com.mall.admin.config.OutboundRestClientFactory;
 import com.mall.admin.support.ApiResponse;
 import com.mall.admin.support.BusinessException;
 import com.mall.admin.support.dto.MemberSnapshotVO;
@@ -7,12 +8,11 @@ import com.mall.admin.support.dto.PageResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,6 +24,18 @@ import java.util.Map;
  * 路径、请求体字段名、值的格式（{@code LocalDateTime#toString()} 的 ISO 形式）都照抄——
  * 因为"切换前后 user-center 收到的请求必须是同一个请求"，否则分页/过滤结果会悄悄变
  * （例如把 {@code 2026-09-01T00:00} 写成 {@code 2026-09-01 00:00:00}，Jackson 侧的解析就会不同）。
+ *
+ * <h2>P8-7 起：HTTP 调用改由声明式接口 {@link UserCenterMemberApi} 承担</h2>
+ * 本类保留**域语义**三件事，其余交给接口：
+ * <ul>
+ *   <li><b>连接装配</b>：{@code lb://} 走服务发现（{@code @LoadBalanced} 的 builder，其上已挂
+ *       {@code OutboundHeadersInterceptor} 统一注入 {@code X-Internal-Token} / {@code X-Trace-Id}）、
+ *       {@code http://} 直连（排障/演练用），并设置 connect/read 超时；</li>
+ *   <li><b>错误语义</b>：传输失败/空响应 → {@code BusinessException(500, 系统繁忙，请稍后重试)}；
+ *       下游业务码非 0 → **原样透传**；</li>
+ *   <li><b>请求体形状适配</b>：分页请求体的字段名与值的格式（ISO 时间串）在这里组装
+ *       ——"发出去的请求必须与单体逐字一致"这条判据的落点。</li>
+ * </ul>
  *
  * <h2>错误语义（C1：与单体同文案）</h2>
  * <ul>
@@ -43,24 +55,21 @@ import java.util.Map;
 @Component
 public class UserCenterMemberClient {
 
-    private static final String BASE = "/internal/v1/user";
     private static final String DOWNSTREAM_ERROR_MESSAGE = "系统繁忙，请稍后重试";
 
-    private final RestClient restClient;
-    private final String internalToken;
+    private final UserCenterMemberApi api;
 
     public UserCenterMemberClient(@LoadBalanced RestClient.Builder loadBalancedBuilder,
+                                  OutboundRestClientFactory restClients,
                                   @Value("${mall.user-center.base-url:lb://mall-user-center}") String baseUrl,
-                                  @Value("${mall.internal.token:}") String internalToken,
                                   @Value("${mall.user-center.connect-timeout-ms:300}") long connectTimeoutMs,
                                   @Value("${mall.user-center.read-timeout-ms:2500}") long readTimeoutMs) {
-        RestClient.Builder builder = baseUrl.startsWith("lb://") ? loadBalancedBuilder : RestClient.builder();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        this.restClient = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
-        this.internalToken = internalToken;
-        log.info("会员域客户端就绪: base-url={}, connect-timeout={}ms, read-timeout={}ms",
+        RestClient restClient = restClients.build(loadBalancedBuilder, baseUrl, connectTimeoutMs, readTimeoutMs);
+        this.api = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(UserCenterMemberApi.class);
+        // 启动日志：活体核对"会员域到底指向哪"（排查"看板会员数为什么全是 0"的第一行）
+        log.info("会员域客户端就绪(HTTP Interface): base-url={}, connect-timeout={}ms, read-timeout={}ms",
                 baseUrl, connectTimeoutMs, readTimeoutMs);
     }
 
@@ -81,9 +90,7 @@ public class UserCenterMemberClient {
         body.put("status", status);
         body.put("pageNum", pageNum);
         body.put("pageSize", pageSize);
-        return post("/member/page", body,
-                new ParameterizedTypeReference<ApiResponse<PageResult<MemberSnapshotVO>>>() {
-                });
+        return unwrap("member/page", call(() -> api.page(body)));
     }
 
     /**
@@ -94,14 +101,12 @@ public class UserCenterMemberClient {
      * （单体 {@code UserCenterClient.memberSnapshot} 的踩坑注释）。
      */
     public MemberSnapshotVO snapshot(long memberId) {
-        return get("/member/{id}/snapshot", new ParameterizedTypeReference<ApiResponse<MemberSnapshotVO>>() {
-        }, memberId);
+        return unwrap("member/{id}/snapshot", call(() -> api.snapshot(memberId)));
     }
 
     /** 会员总数（看板 summary 的 {@code memberCount}） */
     public long count() {
-        Long count = get("/member/count", new ParameterizedTypeReference<ApiResponse<Long>>() {
-        });
+        Long count = unwrap("member/count", call(api::count));
         return count == null ? 0L : count;
     }
 
@@ -112,42 +117,30 @@ public class UserCenterMemberClient {
      * <b>只需</b>处理自己的副作用（看板缓存失效），不需要、也不该再 bump 任何版本号。
      */
     public void updateStatus(long memberId, int status) {
-        post("/member/" + memberId + "/status", Map.of("status", status),
-                new ParameterizedTypeReference<ApiResponse<Void>>() {
-                });
+        unwrap("member/{id}/status", call(() -> api.updateStatus(memberId, Map.of("status", status))));
     }
 
-    // ==================== 内部 ====================
+    // ==================== 内部（口径同 TradeStatClient） ====================
 
-    private <T> T get(String uriTemplate, ParameterizedTypeReference<ApiResponse<T>> type, Object... uriVariables) {
-        ApiResponse<T> response;
+    /**
+     * 把"调用接口"这一步的**传输异常**收敛成统一文案。
+     *
+     * <p>为什么还要这层 try/catch：声明式接口解决的是"HTTP ↔ 类型"的样板，**不解决错误语义**——
+     * 连接被拒/超时/读超时抛的是 {@code ResourceAccessException}，非 0 业务码抛的是
+     * {@code HttpClientErrorException}（RestClient 默认状态处理器在 4xx/5xx 上抛），
+     * 两者都要在这里变成"域的失败"，调用方才知道"这个依赖不可用"。
+     */
+    private <T> ApiResponse<T> call(java.util.function.Supplier<ApiResponse<T>> invocation) {
         try {
-            response = restClient.get().uri(BASE + uriTemplate, uriVariables)
-                    .header("X-Internal-Token", internalToken)
-                    .retrieve()
-                    .body(type);
+            return invocation.get();
         } catch (Exception e) {
-            log.debug("调用会员域失败: uri={} err={}", uriTemplate, e.toString());
+            // debug 而不是 error：降级是调用方的策略，不该在这里刷错误栈（级别由调用方定，见类注释）
+            log.debug("调用会员域失败: err={}", e.toString());
             throw new BusinessException(500, DOWNSTREAM_ERROR_MESSAGE);
         }
-        return unwrap(uriTemplate, response);
     }
 
-    private <T> T post(String path, Object body, ParameterizedTypeReference<ApiResponse<T>> type) {
-        ApiResponse<T> response;
-        try {
-            response = restClient.post().uri(BASE + path)
-                    .header("X-Internal-Token", internalToken)
-                    .body(body)
-                    .retrieve()
-                    .body(type);
-        } catch (Exception e) {
-            log.debug("调用会员域失败: path={} err={}", path, e.toString());
-            throw new BusinessException(500, DOWNSTREAM_ERROR_MESSAGE);
-        }
-        return unwrap(path, response);
-    }
-
+    /** 空响应按传输失败处理（宁可 500，也不要把 null 当"没有数据"）；非 0 业务码原样透传 */
     private <T> T unwrap(String uri, ApiResponse<T> response) {
         if (response == null) {
             log.debug("调用会员域返回空响应: uri={}", uri);

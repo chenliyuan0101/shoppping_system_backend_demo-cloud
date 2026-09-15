@@ -1,5 +1,7 @@
 package com.mall.demo.app;
 
+import com.mall.demo.common.client.OutboundHeadersInterceptor;
+
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

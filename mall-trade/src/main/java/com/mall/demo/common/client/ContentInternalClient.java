@@ -10,20 +10,17 @@ import com.mall.demo.common.dto.NoticeSaveRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
 import java.io.IOException;
-import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -35,151 +32,86 @@ import java.util.function.Supplier;
  * 于是单体继续当"鉴权 + 对外契约"的门面，业务与数据在内容域——**这是过渡形态**，
  * 退场条件（P3 网关验签 / P7 管理端 BFF）写在方案 §5 P2 决策 1。
  *
- * <p>三条纪律：
+ * <h2>HTTP 调用改由声明式接口 {@link ContentInternalApi} 承担</h2>
+ * 本类保留**域语义**三件事，其余交给接口：
  * <ol>
  *   <li><b>错误透传</b>：内容域返回的 {@code code/message} 原样抛成 {@link BusinessException}，
  *       由 {@code GlobalExceptionHandler} 变成同样的响应体——客户端看不到任何差异（C1）；</li>
  *   <li><b>下游不可用 → 500</b>：写操作是"关键路径"，不能像首页那样降级成空数据；
  *       统一成既有的 {@code 500 系统繁忙，请稍后重试}，真实原因进日志；</li>
- *   <li><b>带内部密钥</b>：{@code X-Internal-Token}（网关不路由 {@code /internal/**}，见 §4.10）。</li>
+ *   <li><b>空响应按失败处理</b>：宁可 500，也不要把 {@code null} 当"没有数据"。</li>
  * </ol>
+ * 内部密钥 {@code X-Internal-Token} 不再由本类手工写：{@code lb://} 走
+ * {@code @LoadBalanced RestClient.Builder} 上挂的 {@code OutboundHeadersInterceptor}，
+ * {@code http://} 直连由 {@link OutboundRestClientFactory} 显式挂同一个拦截器 ⇒ 两条分支的头一致。
+ *
+ * <p>{@link #unwrap(String, Supplier)} 的签名与全部日志文案与迁移前**逐字相同**（含 action 标签），
+ * 只是里面的 {@code Supplier} 从"手写 RestClient 链"换成了"接口方法调用"。
  */
 @Slf4j
 @Component
 public class ContentInternalClient {
 
-    /** 内容域内部接口前缀（与 {@code mall-content} 的 InternalXxxController 一一对应） */
-    private static final String BASE = "/internal/v1/content";
-
     /** 下游不可用时的兜底文案：与 GlobalExceptionHandler 的 500 文案逐字一致 */
     private static final String DOWNSTREAM_ERROR_MESSAGE = "系统繁忙，请稍后重试";
 
-    private final RestClient restClient;
-    private final String internalToken;
+    private final ContentInternalApi api;
 
     public ContentInternalClient(@LoadBalanced RestClient.Builder loadBalancedBuilder,
+                                 OutboundRestClientFactory restClients,
                                  @Value("${mall.content.base-url:lb://mall-content}") String baseUrl,
-                                 @Value("${mall.internal.token:}") String internalToken,
                                  @Value("${mall.content.connect-timeout-ms:200}") long connectTimeoutMs,
                                  @Value("${mall.content.read-timeout-ms:1000}") long readTimeoutMs) {
-        RestClient.Builder builder = baseUrl.startsWith("lb://") ? loadBalancedBuilder : RestClient.builder();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        this.restClient = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
-        this.internalToken = internalToken;
-        log.info("内容域客户端就绪: base-url={}, connect-timeout={}ms, read-timeout={}ms",
+        RestClient restClient = restClients.build(loadBalancedBuilder, baseUrl, connectTimeoutMs, readTimeoutMs);
+        this.api = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(ContentInternalApi.class);
+        log.info("内容域客户端就绪(HTTP Interface): base-url={}, connect-timeout={}ms, read-timeout={}ms",
                 baseUrl, connectTimeoutMs, readTimeoutMs);
     }
 
     // ==================== 轮播 ====================
 
     public PageResult<AdminBannerVO> bannerPage(String keyword, Integer status, long pageNum, long pageSize) {
-        return unwrap("bannerPage", () -> restClient.get()
-                .uri(uri -> uri.path(BASE + "/banner/page")
-                        .queryParamIfPresent("keyword", Optional.ofNullable(keyword))
-                        .queryParamIfPresent("status", Optional.ofNullable(status))
-                        .queryParam("pageNum", pageNum)
-                        .queryParam("pageSize", pageSize)
-                        .build())
-                .header(InternalHeader.NAME, internalToken)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<PageResult<AdminBannerVO>>>() {
-                }));
+        return unwrap("bannerPage", () -> api.bannerPage(keyword, status, pageNum, pageSize));
     }
 
     public Long createBanner(BannerSaveRequest request) {
-        return unwrap("createBanner", () -> restClient.post()
-                .uri(BASE + "/banner")
-                .header(InternalHeader.NAME, internalToken)
-                .body(request)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Long>>() {
-                }));
+        return unwrap("createBanner", () -> api.createBanner(request));
     }
 
     public void updateBanner(Long id, BannerSaveRequest request) {
-        unwrap("updateBanner", () -> restClient.put()
-                .uri(BASE + "/banner/{id}", id)
-                .header(InternalHeader.NAME, internalToken)
-                .body(request)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
-                }));
+        unwrap("updateBanner", () -> api.updateBanner(id, request));
     }
 
     public void updateBannerStatus(Long id, Integer status) {
-        unwrap("updateBannerStatus", () -> restClient.put()
-                .uri(BASE + "/banner/{id}/status", id)
-                .header(InternalHeader.NAME, internalToken)
-                .body(Map.of("status", status))
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
-                }));
+        unwrap("updateBannerStatus", () -> api.updateBannerStatus(id, Map.<String, Object>of("status", status)));
     }
 
     public void deleteBanner(Long id) {
-        unwrap("deleteBanner", () -> restClient.delete()
-                .uri(BASE + "/banner/{id}", id)
-                .header(InternalHeader.NAME, internalToken)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
-                }));
+        unwrap("deleteBanner", () -> api.deleteBanner(id));
     }
 
     // ==================== 公告 ====================
 
     public PageResult<AdminNoticeVO> noticePage(String keyword, Integer status, long pageNum, long pageSize) {
-        return unwrap("noticePage", () -> restClient.get()
-                .uri(uri -> uri.path(BASE + "/notice/page")
-                        .queryParamIfPresent("keyword", Optional.ofNullable(keyword))
-                        .queryParamIfPresent("status", Optional.ofNullable(status))
-                        .queryParam("pageNum", pageNum)
-                        .queryParam("pageSize", pageSize)
-                        .build())
-                .header(InternalHeader.NAME, internalToken)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<PageResult<AdminNoticeVO>>>() {
-                }));
+        return unwrap("noticePage", () -> api.noticePage(keyword, status, pageNum, pageSize));
     }
 
     public Long createNotice(NoticeSaveRequest request) {
-        return unwrap("createNotice", () -> restClient.post()
-                .uri(BASE + "/notice")
-                .header(InternalHeader.NAME, internalToken)
-                .body(request)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Long>>() {
-                }));
+        return unwrap("createNotice", () -> api.createNotice(request));
     }
 
     public void updateNotice(Long id, NoticeSaveRequest request) {
-        unwrap("updateNotice", () -> restClient.put()
-                .uri(BASE + "/notice/{id}", id)
-                .header(InternalHeader.NAME, internalToken)
-                .body(request)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
-                }));
+        unwrap("updateNotice", () -> api.updateNotice(id, request));
     }
 
     public void updateNoticeStatus(Long id, Integer status) {
-        unwrap("updateNoticeStatus", () -> restClient.put()
-                .uri(BASE + "/notice/{id}/status", id)
-                .header(InternalHeader.NAME, internalToken)
-                .body(Map.of("status", status))
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
-                }));
+        unwrap("updateNoticeStatus", () -> api.updateNoticeStatus(id, Map.<String, Object>of("status", status)));
     }
 
     public void deleteNotice(Long id) {
-        unwrap("deleteNotice", () -> restClient.delete()
-                .uri(BASE + "/notice/{id}", id)
-                .header(InternalHeader.NAME, internalToken)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
-                }));
+        unwrap("deleteNotice", () -> api.deleteNotice(id));
     }
 
     // ==================== 文件上传 ====================
@@ -190,6 +122,9 @@ public class ContentInternalClient {
      * <p>单体只保留"空文件 / 大小"这两个**不必过网络**的校验；
      * "是不是真图片（魔数）"由内容域判定——它才是决定"哪些字节能进公开桶"的地方，
      * 判断与存储绑在一起才不会漏。返回体 {@code {url,name,size,contentType}} 原样透传。
+     *
+     * <p>报文形状**未变**：仍是 {@code MultiValueMap} + {@code ByteArrayResource}（带 filename）
+     * 交给 {@link ContentInternalApi#upload}（方法级 {@code multipart/form-data}）。
      */
     public Map<String, Object> upload(MultipartFile file) {
         byte[] bytes;
@@ -208,14 +143,7 @@ public class ContentInternalClient {
             }
         });
 
-        return unwrap("upload", () -> restClient.post()
-                .uri(BASE + "/upload")
-                .header(InternalHeader.NAME, internalToken)
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(body)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Map<String, Object>>>() {
-                }));
+        return unwrap("upload", () -> api.upload(body));
     }
 
     // ==================== 内部 ====================
@@ -223,6 +151,10 @@ public class ContentInternalClient {
     /**
      * 统一解包：业务码非 0 → 原样抛成 {@link BusinessException}（文案、错误码都不变）；
      * 传输层异常（超时/连接失败/5xx）→ 500「系统繁忙，请稍后重试」+ 日志。
+     *
+     * <p>为什么迁移到声明式接口后**仍然**要这层 try/catch：接口解决的是"HTTP ↔ 类型"的样板，
+     * **不解决错误语义**——连接被拒/超时抛 {@code ResourceAccessException}，4xx/5xx 抛
+     * {@code HttpClientErrorException}（RestClient 默认状态处理器），两者都要在这里变成"域的失败"。
      */
     private <T> T unwrap(String action, Supplier<ApiResponse<T>> invocation) {
         ApiResponse<T> response;
@@ -240,13 +172,5 @@ public class ContentInternalClient {
             throw new BusinessException(response.getCode(), response.getMessage());
         }
         return response.getData();
-    }
-
-    /** 内部凭据请求头名：与两个服务的 InternalApiAuthInterceptor 常量保持一致 */
-    private static final class InternalHeader {
-        private static final String NAME = "X-Internal-Token";
-
-        private InternalHeader() {
-        }
     }
 }

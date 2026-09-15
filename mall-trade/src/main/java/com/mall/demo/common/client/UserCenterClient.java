@@ -11,12 +11,11 @@ import com.mall.demo.common.dto.MemberSnapshotVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashMap;
@@ -31,43 +30,50 @@ import java.util.function.Supplier;
  * {@code CartCheckoutService} / {@code AddressQueryService}）——P0 把它们做成"只收发 DTO 的纯接口"，
  * 就是为了这一天：调用点一行不用改，只把实现从"查本地表"换成"调 HTTP"。
  *
- * <p>路径与形状**逐字对齐** {@code mall-user-center} 的 {@code /internal/v1/user/**}
+ * <h2>HTTP 调用改由声明式接口 {@link UserCenterApi} 承担</h2>
+ * 路径**逐字对齐** {@code mall-user-center} 的 {@code /internal/v1/user/**}
  * （原单体的 {@code InternalUserController} 平移到那边），因此切换当天只改调用方，不改契约。
+ * 本类保留"域语义 + 数据形状"：连接装配、错误语义（传输异常/空响应 → 500；
+ * 业务码非 0 → 原样透传，{@code 404「会员不存在」}之类不能变成 500）、
+ * 空集合/空关键字的 body 拼装、{@code LocalDateTime} → 字符串的时间口径。
  *
  * <p>购物车结算两阶段（P3 的购物车闸门改造，见方案 §5 P3）：
  * {@link #claimCartItems} 以 {@code orderNo} 为幂等键领取购物车明细；订单事务回滚时由调用方
  * 显式调用 {@link #restoreCartItems} 归还——**不再依赖"远程删除会被本地事务回滚"**（那个前提已失效）。
+ *
+ * <p>内部密钥 {@code X-Internal-Token} 不再手工写：{@code lb://} 走 {@code @LoadBalanced} builder 上的
+ * {@code OutboundHeadersInterceptor}，{@code http://} 直连由
+ * {@link OutboundRestClientFactory} 显式挂同一个拦截器。
+ *
+ * <p>{@link #get(String, Supplier)} / {@link #post(String, Supplier)} / {@link #exchange(String, Supplier)}
+ * 的 action 标签（{@code "GET /member/{id}"}、{@code "POST /member/page"}、{@code "updateMemberStatus"}）
+ * 与日志文案与迁移前**逐字相同**。
  */
 @Slf4j
 @Component
 public class UserCenterClient {
 
-    private static final String BASE = "/internal/v1/user";
     private static final String DOWNSTREAM_ERROR_MESSAGE = "系统繁忙，请稍后重试";
 
-    private final RestClient restClient;
-    private final String internalToken;
+    private final UserCenterApi api;
 
     public UserCenterClient(@LoadBalanced RestClient.Builder loadBalancedBuilder,
+                            OutboundRestClientFactory restClients,
                             @Value("${mall.user-center.base-url:lb://mall-user-center}") String baseUrl,
-                            @Value("${mall.internal.token:}") String internalToken,
                             @Value("${mall.user-center.connect-timeout-ms:300}") long connectTimeoutMs,
                             @Value("${mall.user-center.read-timeout-ms:2000}") long readTimeoutMs) {
-        RestClient.Builder builder = baseUrl.startsWith("lb://") ? loadBalancedBuilder : RestClient.builder();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofMillis(connectTimeoutMs));
-        requestFactory.setReadTimeout(Duration.ofMillis(readTimeoutMs));
-        this.restClient = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
-        this.internalToken = internalToken;
-        log.info("用户中心客户端就绪: base-url={}, connect-timeout={}ms, read-timeout={}ms",
+        RestClient restClient = restClients.build(loadBalancedBuilder, baseUrl, connectTimeoutMs, readTimeoutMs);
+        this.api = HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(UserCenterApi.class);
+        log.info("用户中心客户端就绪(HTTP Interface): base-url={}, connect-timeout={}ms, read-timeout={}ms",
                 baseUrl, connectTimeoutMs, readTimeoutMs);
     }
 
     // ==================== 会员 ====================
 
     public MemberBriefVO member(long memberId) {
-        return get("/member/{id}", new ParameterizedTypeReference<ApiResponse<MemberBriefVO>>() {
-        }, memberId);
+        return get("/member/{id}", () -> api.member(memberId));
     }
 
     /**
@@ -83,25 +89,20 @@ public class UserCenterClient {
      * @return 会员不存在（含逻辑删除）→ {@code null}（不是异常：调用方据此返回 404 语义）
      */
     public MemberSnapshotVO memberSnapshot(long memberId) {
-        return get("/member/{id}/snapshot", new ParameterizedTypeReference<ApiResponse<MemberSnapshotVO>>() {
-        }, memberId);
+        return get("/member/{id}/snapshot", () -> api.memberSnapshot(memberId));
     }
+
     public long memberCount() {
-        Long count = get("/member/count", new ParameterizedTypeReference<ApiResponse<Long>>() {
-        });
+        Long count = get("/member/count", () -> api.memberCount());
         return count == null ? 0L : count;
     }
 
     public List<MemberBriefVO> members(Collection<Long> memberIds) {
-        return post("/member/batch", Map.of("memberIds", emptyIfNull(memberIds)),
-                new ParameterizedTypeReference<ApiResponse<List<MemberBriefVO>>>() {
-                });
+        return post("/member/batch", () -> api.members(Map.of("memberIds", emptyIfNull(memberIds))));
     }
 
     public List<Long> searchMemberIds(String keyword) {
-        return post("/member/search-ids", Map.of("keyword", keyword == null ? "" : keyword),
-                new ParameterizedTypeReference<ApiResponse<List<Long>>>() {
-                });
+        return post("/member/search-ids", () -> api.searchMemberIds(Map.of("keyword", keyword == null ? "" : keyword)));
     }
 
     /**
@@ -120,42 +121,33 @@ public class UserCenterClient {
         body.put("status", status);
         body.put("pageNum", pageNum);
         body.put("pageSize", pageSize);
-        return post("/member/page", body,
-                new ParameterizedTypeReference<ApiResponse<PageResult<MemberSnapshotVO>>>() {
-                });
+        return post("/member/page", () -> api.memberPage(body));
     }
 
     /** 管理员改会员状态（属主域内保证"禁用即失效令牌"这条不变量） */
     public void updateMemberStatus(long memberId, int status) {
-        exchange(() -> restClient.post().uri(BASE + "/member/{id}/status", memberId)
-                .header(InternalApiHeaders.TOKEN, internalToken)
-                .body(Map.of("status", status))
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
-                }), "updateMemberStatus");
+        exchange("updateMemberStatus",
+                () -> api.updateMemberStatus(memberId, Map.<String, Object>of("status", status)));
     }
 
     // ==================== 地址 ====================
 
     /** 默认地址；不存在返回 null（下单时按"请选择收货地址"处理） */
     public AddressSnapshotVO defaultAddress(long memberId) {
-        return get("/address/default?memberId={id}", new ParameterizedTypeReference<ApiResponse<AddressSnapshotVO>>() {
-        }, memberId);
+        return get("/address/default?memberId={id}", () -> api.defaultAddress(memberId));
     }
 
     /** 指定地址；不存在或不属于该会员 → null（不区分两者，避免探测他人地址） */
     public AddressSnapshotVO address(long memberId, long addressId) {
-        return get("/address/{aid}?memberId={mid}", new ParameterizedTypeReference<ApiResponse<AddressSnapshotVO>>() {
-        }, addressId, memberId);
+        return get("/address/{aid}?memberId={mid}", () -> api.address(addressId, memberId));
     }
 
     // ==================== 购物车（结算闸门两阶段） ====================
 
     /** 读要结算的购物车条目（不含价格——价格必须由商品域现算） */
     public List<CartItemSnapshotVO> cartItems(long memberId, Collection<Long> itemIds) {
-        return post("/cart/items", Map.of("memberId", memberId, "itemIds", emptyIfNull(itemIds)),
-                new ParameterizedTypeReference<ApiResponse<List<CartItemSnapshotVO>>>() {
-                });
+        return post("/cart/items", () -> api.cartItems(
+                Map.of("memberId", memberId, "itemIds", emptyIfNull(itemIds))));
     }
 
     /**
@@ -167,10 +159,8 @@ public class UserCenterClient {
      * 不同订单抢同一批明细时，仍然只有一方拿到。
      */
     public CartClaimResultVO claimCartItems(long memberId, String orderNo, Collection<Long> itemIds) {
-        return post("/cart/claim",
-                Map.of("memberId", memberId, "orderNo", orderNo, "itemIds", emptyIfNull(itemIds)),
-                new ParameterizedTypeReference<ApiResponse<CartClaimResultVO>>() {
-                });
+        return post("/cart/claim", () -> api.claimCartItems(
+                Map.of("memberId", memberId, "orderNo", orderNo, "itemIds", emptyIfNull(itemIds))));
     }
 
     /**
@@ -181,9 +171,8 @@ public class UserCenterClient {
      */
     public boolean restoreCartItems(long memberId, String orderNo) {
         try {
-            Boolean restored = post("/cart/restore", Map.of("memberId", memberId, "orderNo", orderNo),
-                    new ParameterizedTypeReference<ApiResponse<Boolean>>() {
-                    });
+            Boolean restored = post("/cart/restore",
+                    () -> api.restoreCartItems(Map.of("memberId", memberId, "orderNo", orderNo)));
             return Boolean.TRUE.equals(restored);
         } catch (Exception e) {
             log.error("购物车明细补偿失败(需对账兜底): memberId={} orderNo={}", memberId, orderNo, e);
@@ -197,31 +186,26 @@ public class UserCenterClient {
     /**
      * GET 的统一入口。
      *
-     * <p>⚠️ <b>必须由调用方传入具体的 {@code ParameterizedTypeReference}</b>，不能在这里用
-     * {@code ParameterizedTypeReference<ApiResponse<T>>}：泛型方法里的 {@code T} 会被擦除，
-     * Jackson 只能把 {@code data} 反序列化成 {@code LinkedHashMap}，于是调用方拿到
-     * {@code ClassCastException: LinkedHashMap cannot be cast to ...}。
-     * 这个 bug **编译期完全看不出来**，只在运行时炸——P3-4 切远程模式时实测踩到
-     * （后台会员详情 500），因此这里把类型显式化并留下注释。
+     * <p>迁移前这里要求调用方传 {@code ParameterizedTypeReference}（泛型擦除的坑，见
+     * {@link UserCenterApi} 的类注释）；现在类型由接口方法签名给出，
+     * 本方法只负责"action 标签 + 错误语义"，{@code uriTemplate} 仅用于日志标签（与迁移前逐字一致）。
      */
-    private <T> T get(String uriTemplate, ParameterizedTypeReference<ApiResponse<T>> type, Object... uriVariables) {
-        return exchange(() -> restClient.get()
-                .uri(BASE + uriTemplate, uriVariables)
-                .header(InternalApiHeaders.TOKEN, internalToken)
-                .retrieve()
-                .body(type), "GET " + uriTemplate);
+    private <T> T get(String uriTemplate, Supplier<ApiResponse<T>> invocation) {
+        return exchange("GET " + uriTemplate, invocation);
     }
 
-    private <T> T post(String path, Object body, ParameterizedTypeReference<ApiResponse<T>> type) {
-        return exchange(() -> restClient.post()
-                .uri(BASE + path)
-                .header(InternalApiHeaders.TOKEN, internalToken)
-                .body(body)
-                .retrieve()
-                .body(type), "POST " + path);
+    private <T> T post(String path, Supplier<ApiResponse<T>> invocation) {
+        return exchange("POST " + path, invocation);
     }
 
-    private <T> T exchange(Supplier<ApiResponse<T>> invocation, String action) {
+    /**
+     * 错误语义的唯一落点：传输异常/空响应 → 500「系统繁忙，请稍后重试」；业务码非 0 → 原样透传。
+     *
+     * <p>为什么声明式接口之后仍然要这层 try/catch：接口解决的是"HTTP ↔ 类型"的样板，
+     * **不解决错误语义**——连接被拒/超时抛 {@code ResourceAccessException}，4xx/5xx 抛
+     * {@code HttpClientErrorException}，两者都要在这里变成"域的失败"。
+     */
+    private <T> T exchange(String action, Supplier<ApiResponse<T>> invocation) {
         ApiResponse<T> response;
         try {
             response = invocation.get();
@@ -242,13 +226,5 @@ public class UserCenterClient {
 
     private static <T> List<T> emptyIfNull(Collection<T> values) {
         return values == null ? List.of() : List.copyOf(values);
-    }
-
-    /** 内部凭据头名（与两侧 InternalApiAuthInterceptor 的常量一致） */
-    private static final class InternalApiHeaders {
-        private static final String TOKEN = "X-Internal-Token";
-
-        private InternalApiHeaders() {
-        }
     }
 }
