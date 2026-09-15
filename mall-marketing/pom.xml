@@ -170,6 +170,22 @@
             <artifactId>mall-common</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <!--
+            v5.3：数据库结构版本管理（Flyway）。与 mall-trade 同口径。
+            🔴 必须引 `spring-boot-starter-flyway`：Boot 4 把自动配置**模块化**了，
+               只引 `flyway-core` 会"静默不生效"（应用照常启动、一条 Flyway 日志都没有、
+               flyway_schema_history 也不会被创建）——不报错，所以最难发现。
+            `flyway-mysql` 是 MySQL 方言模块（Flyway 10 起必须单独引）。
+            版本由 Boot BOM 管，这里**不写版本号**。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
 </dependencies>
 
     <build>
