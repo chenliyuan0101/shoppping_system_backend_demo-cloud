@@ -107,15 +107,16 @@ mall:
   # =====================================================================
   user-center:
     # P3-4 收口后会员/地址/购物车的本地实现已随代码删除（对应的 ums_member 等表已搬进 mall-user-center）。
-    # 默认 true：本地实现已随 P3-4 删除，false 会导致"没有该契约的 Bean"启动失败。
-    # 测试通过 @TestPropertySource 覆盖为 false（走测试替身，不依赖 user-center 进程）。
     # 注：ums_notification 的写入路径 P3-5 已随消费者搬到 mall-user-center（本单体不再写该表）。
-    # ⚠️ 已知陷阱（待修）：本地实现已随 P3-4 删除，因此**任何**取值都必须有对应 Bean：
-    #   false = 依赖测试替身 UserCenterTestDoubleConfig（仅测试作用域，生产没有）；
-    #   true  = 走 UserCenterRemoteConfig（生产正确值，但需要传 flag）。
-    # 当前保持 false 以维持测试绿（真库套件靠测试替身）；**生产启动必须传 --mall.user-center.remote=true**。
-    # 彻底修法（下一步）：把测试替身的条件从 remote=false 改成独立的测试专用属性，再把默认值定为 true。
-    remote: false
+    #
+    # ⚠️ 这里**刻意不写** mall.user-center.remote（与 mall.product.remote / mall.marketing.remote 同一口径：
+    #    src/main/resources 的任何 yaml 里都不出现这个键）：
+    #      · 属性缺失 ⇒ UserCenterRemoteConfig（matchIfMissing=true）生效 = 走 user-center 内部接口（生产正确值）；
+    #      · 测试期由 MySqlTestBase 的 @TestPropertySource + src/test/resources/application.properties
+    #        显式置 false ⇒ 走测试替身 UserCenterTestDoubleConfig，不依赖 user-center 进程。
+    # 2026-09-16 修（此前这里写着 `remote: false`，而 UserCenterRemoteConfig 只有 havingValue="true"，
+    #    于是"不显式传 --mall.user-center.remote=true 就没有对应 Bean"，IDEA 直接 Run 必挂）。
+    #    现在两侧都归队"缺省即远程"：**启动不再需要任何参数**（老脚本继续传 true 也无害）。
     base-url: lb://mall-user-center
     connect-timeout-ms: 300
     read-timeout-ms: 2000

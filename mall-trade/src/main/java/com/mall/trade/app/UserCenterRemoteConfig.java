@@ -22,14 +22,31 @@ import java.util.List;
 import com.mall.common.support.MemberId;
 
 /**
- * 用户中心接线（P3-4）：{@code mall.user-center.remote=true} 时，把 4 个会员域契约
- * 实现成"调用 user-center 内部接口"。
+ * 用户中心接线（P3-4）：把 4 个会员域契约实现成"调用 user-center 内部接口"。
  *
  * <p><b>P3-4 收口后这已经是单体唯一的实现</b>：会员/地址/购物车的本地实现与对应的
  * {@code ums_member}/{@code ums_address}/{@code ums_cart_item} 等表一起迁走了，开关保留只为
- * "生产恒 true / 测试由测试替身顶上"这一件事，不要再把它切回 false
+ * "测试由测试替身顶上"这一件事，不要再把它切回 false
  * （切回去的结果是"没有 MemberQueryService 这个 bean"，启动即失败）。
  * 测试侧实现见 {@code src/test/java/.../UserCenterTestDoubleConfig}。
+ *
+ * <p><b>2026-09-16 修：补上 {@code matchIfMissing = true}</b>（与 {@link ProductRemoteConfig}/
+ * {@link MarketingRemoteConfig} 对齐）。此前这里只有 {@code havingValue = "true"}，而
+ * {@code application.yaml} 里又写着 {@code remote: false} ⇒ **不显式传
+ * {@code --mall.user-center.remote=true} 就没有对应 Bean，启动即挂**（IDEA 直接 Run 就是这么炸的；
+ * 表现是 {@code AdminDashboardServiceImpl} 构造器参数注入不到 {@code MemberQueryService}）。
+ * 项目自己的规则早写在 {@code MarketingTestDoubleConfig} 的 javadoc 里：跨进程契约的远程接线一律
+ * {@code matchIfMissing=true}——"不传属性时就是远程，因此不存在忘了传开关就坏的风险"，
+ * 该属性**只用于测试期显式关闭**。现在 user-center 这条也归队：
+ * <ul>
+ *   <li>不传属性（生产 / IDEA Run / {@code java -jar}）⇒ 本配置生效，走 user-center 内部接口；</li>
+ *   <li>测试期由 {@code MySqlTestBase} 的 {@code @TestPropertySource}（优先级最高、可被子类继承）
+ *       与 {@code src/test/resources/application.properties}（双保险）显式置 {@code false}
+ *       ⇒ 仍走测试替身，不依赖 user-center 进程。</li>
+ * </ul>
+ * ⚠️ 同名开关在 {@code mall-user-center} 里含义**相反**（{@code AddressQueryServiceImpl} 是
+ * {@code havingValue="false", matchIfMissing=true}）：这个参数**只能传给 trade**；
+ * 传给 user-center 会让它的 {@code AddressQueryService} 没有 Bean，同样起不来。
  * 注意：{@code ums_notification} 的写入路径 P3-5 已搬到 user-center（本单体只保留订单日统计），
  * 因此本类不管站内消息。
  *
@@ -49,7 +66,7 @@ import com.mall.common.support.MemberId;
  * 契约本身才不会被绑上实现细节。
  */
 @Configuration
-@ConditionalOnProperty(name = "mall.user-center.remote", havingValue = "true")
+@ConditionalOnProperty(name = "mall.user-center.remote", havingValue = "true", matchIfMissing = true)
 public class UserCenterRemoteConfig {
 
     @Bean
