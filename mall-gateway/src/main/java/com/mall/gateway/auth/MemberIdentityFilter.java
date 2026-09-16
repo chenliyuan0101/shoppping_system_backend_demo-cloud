@@ -53,7 +53,6 @@ import java.nio.charset.StandardCharsets;
  * 登录态立刻回到"各服务自己验"的老路（下游的回退路径还在，见单体 {@code MemberSession}）。
  */
 @Component
-@
 public class MemberIdentityFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(MemberIdentityFilter.class);

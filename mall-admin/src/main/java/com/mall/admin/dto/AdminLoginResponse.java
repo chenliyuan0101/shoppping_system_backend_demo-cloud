@@ -13,7 +13,8 @@ import lombok.Data;
  *   <li>{@code data.admin} —— {@code admin.id/username/nickname/status} 四个字段（顺序无关，键集合必须相同）。</li>
  * </ul>
  * ⚠️ 这个形状被 C1 基线里的 `admin-*` 用例间接依赖（33 项后台用例全部先调 login 拿令牌），
- * 也直接决定前端管理后台（5175）的解析。
+ * 也直接决定前端管理后台（`vue-admin`，5174，base `/admin/`）的解析：`Login.vue` 读
+ * `data.token` 与 `data.admin`。
  */
 @Data
 @AllArgsConstructor
